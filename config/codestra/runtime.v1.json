@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "service": "grafana",
+  "hostname": "graf.codestra.media",
+  "publicUrl": "https://graf.codestra.media",
+  "hostBind": "127.0.0.1:3000",
+  "publicNativePortAllowed": false,
+  "edgeRepository": "appolon1908-hue/Caddy",
+  "identityRepository": "appolon1908-hue/Keycloak",
+  "oidc": {
+    "issuer": "https://auth.codestra.co/realms/codestra",
+    "clientId": "grafana-observability",
+    "callback": "https://graf.codestra.media/login/generic_oauth",
+    "pkce": "S256",
+    "clientSecretFile": "/run/secrets/grafana_oidc_client_secret",
+    "roleClaimPath": "realm_access.roles",
+    "roleMapping": {
+      "observability-viewer": "Viewer",
+      "observability-operator": "Editor",
+      "observability-admin": "GrafanaAdmin"
+    }
+  },
+  "dataSources": [
+    {"id": "prometheus", "url": "http://prometheus:9090", "access": "private"},
+    {"id": "loki", "url": "http://loki:3100", "access": "private"},
+    {"id": "tempo", "url": "http://tempo:3200", "access": "private"}
+  ],
+  "activation": {
+    "deploymentEnabled": false,
+    "oidcSecretInstalled": false,
+    "caddyRouteActivated": false,
+    "productionApproved": false
+  }
+}
