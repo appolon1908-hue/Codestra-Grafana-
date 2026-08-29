@@ -1,5 +1,7 @@
 apiVersion: 1
 
+prune: true
+
 deleteDatasources:
   - name: Codestra Prometheus
     orgId: 1
@@ -15,24 +17,31 @@ datasources:
     uid: codestra-prometheus
     type: prometheus
     access: proxy
-    url: https://prom.codestra.media
+    url: http://prometheus:9090
     isDefault: true
     editable: false
     jsonData:
       httpMethod: POST
       timeInterval: 15s
+      queryTimeout: 60s
+      manageAlerts: false
       tlsSkipVerify: false
       exemplarTraceIdDestinations:
         - name: trace_id
+          datasourceUid: codestra-tempo
+        - name: traceID
           datasourceUid: codestra-tempo
 
   - name: Codestra Loki
     uid: codestra-loki
     type: loki
     access: proxy
-    url: https://loki.codestra.media
+    url: http://loki-query:3100
     editable: false
     jsonData:
+      timeout: 60
+      maxLines: 1000
+      manageAlerts: false
       tlsSkipVerify: false
       derivedFields:
         - name: TraceID
@@ -41,15 +50,16 @@ datasources:
           url: '$${__value.raw}'
         - name: CorrelationID
           matcherRegex: 'correlation_id[=:]"?([A-Za-z0-9._:-]+)'
-          url: 'https://graf.codestra.media/explore?left=$${__value.raw}'
+          url: '/explore?left=$${__value.raw}'
 
   - name: Codestra Tempo
     uid: codestra-tempo
     type: tempo
     access: proxy
-    url: https://temp.codestra.media
+    url: http://tempo:3200
     editable: false
     jsonData:
+      timeout: 60
       tlsSkipVerify: false
       nodeGraph:
         enabled: true
@@ -61,10 +71,11 @@ datasources:
         spanEndTimeShift: '5m'
         filterByTraceID: true
         filterBySpanID: true
+        customQuery: false
         tags:
           - key: service.name
             value: service
-          - key: deployment.environment
+          - key: deployment.environment.name
             value: environment
           - key: codestra.business
             value: codestra_business
@@ -75,14 +86,23 @@ datasources:
         tags:
           - key: service.name
             value: service
-          - key: deployment.environment
+          - key: deployment.environment.name
             value: environment
+          - key: codestra.business
+            value: codestra_business
+        queries:
+          - name: Request rate
+            query: 'sum(rate(codestra_http_requests_total{$$__tags}[5m]))'
+          - name: Error ratio
+            query: 'sum(rate(codestra_http_requests_total{$$__tags,status=~"5.."}[5m])) / clamp_min(sum(rate(codestra_http_requests_total{$$__tags}[5m])), 0.001)'
+          - name: p95 latency
+            query: 'histogram_quantile(0.95, sum by (le) (rate(codestra_http_request_duration_seconds_bucket{$$__tags}[5m])))'
 
   - name: Codestra Alertmanager
     uid: codestra-alertmanager
     type: alertmanager
     access: proxy
-    url: https://aler.codestra.media
+    url: http://alertmanager:9093
     editable: false
     jsonData:
       implementation: prometheus
