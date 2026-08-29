@@ -1,98 +1,143 @@
-# Codestra Observability Contract
+# Codestra Grafana Observability Contract
 
-This document is the integration contract required for every runtime that appears in Codestra Grafana.
+This is the Grafana-side integration contract for every Codestra-managed application and platform service represented in the corporate operational portal.
 
 ## Purpose
 
-The Grafana control plane must make it possible to answer, from one incident view:
+The corporate incident view must answer:
 
-1. What is broken?
-2. Where is it broken (business, service, environment, host/container)?
-3. Since when?
-4. Which business and, when present in protected event data, which tenant/customer is affected?
-5. What deployment/configuration change preceded the failure?
+1. What is broken or degraded?
+2. Which Codestra business, application, service, environment, region and deployment are affected?
+3. When did the condition begin and how is it changing?
+4. What safe aggregate customer or operational impact is visible?
+5. Which deployment, configuration, capability or provider change preceded the condition?
+6. Which owner and runbook are responsible for the response?
 
-Grafana is observability only. It must not execute business mutations, provider writes, Odoo writes, SMS/email delivery, PSTN dialing, social publishing, or trading orders.
+Grafana is a read-only presentation and investigation authority. It must not execute business mutations, provider writes, Odoo writes, n8n workflows, email/SMS delivery, PSTN dialing, social publishing, lending submissions, funding actions, or trading orders.
 
-## Required low-cardinality metrics labels
+## Canonical dimensions
 
-Every scraped runtime target must expose or receive these labels through Prometheus service discovery/relabeling:
+Every Prometheus target and every bounded Loki stream must carry:
 
-- `codestra_managed="true"`
-- `codestra_business` — stable business identifier from `codestra/business-registry.json`
-- `service` — canonical service name from the registry
-- `environment` — `development`, `test`, `staging`, or `production`
-- `instance` — host/target identity
+- `codestra_business`
+- `application`
+- `service`
+- `environment`
+- `server`
+- `region`
+- `deployment`
 
-Never use `tenant_id`, customer IDs, email addresses, phone numbers, account IDs, order IDs, correlation IDs, request IDs, or trace IDs as Prometheus labels.
+`codestra_business="platform"` represents shared corporate infrastructure. Business IDs are defined in `codestra/business-registry.json`.
 
-## Required application metrics
+Customer IDs, end-tenant IDs, account IDs, user IDs, email addresses, phone numbers, message IDs, order IDs, request IDs, correlation IDs, trace IDs, raw URLs, query strings, SQL statements, container IDs, pod UIDs and unbounded exception text are forbidden as Prometheus labels and Loki stream labels.
 
-Backends and collectors should provide the following normalized metrics directly or through recording rules:
+## Canonical application metrics
 
-- `up`
-- `http_server_requests_total{status=...}`
-- `codestra_build_info{version,git_sha}` with value `1`
-- dependency availability/latency metrics
-- queue depth and worker failure metrics where applicable
-- outbox/inbox/reconciliation metrics for Middleware-backed integrations
-- provider delivery/error metrics for communication services
-- authentication/authorization denial counters for identity/gateway services
+Product backends should expose stable metric families that Prometheus normalizes and records into:
 
-Frontends must be represented by synthetic availability (Blackbox) plus browser/RUM or OpenTelemetry web telemetry. A browser must never receive infrastructure datasource credentials or provider API secrets.
+- `codestra:http_requests:rate5m`
+- `codestra:http_error_ratio:5m`
+- `codestra:http_duration_seconds:p50_5m`
+- `codestra:http_duration_seconds:p95_5m`
+- `codestra:http_duration_seconds:p99_5m`
+- `codestra:dependency_latency_seconds:p95_5m`
+- `codestra:database_latency_seconds:p95_5m`
+- `codestra:queue_depth:max`
+- `codestra:worker_failures:rate5m`
+- `codestra:outbox_backlog:max`
+- `codestra:outbox_oldest_age_seconds:max`
+- `codestra:inbox_backlog:max`
+- `codestra:inbox_oldest_age_seconds:max`
+- `codestra:webhook_delivery_success_ratio:5m`
+- `codestra:authentication_failures:rate5m`
+- `codestra:authorization_denials:rate5m`
+- `codestra:idempotency_conflicts:rate5m`
+- `codestra:reconciliation_failures:rate5m`
+- `codestra:external_provider_failures:rate5m`
+- `codestra:target_up:ratio`
+- `codestra:deployment_info:max`
+- `codestra:slo_http_error_ratio:*`
+- `codestra:slo_http_burn_rate:*`
 
-## Structured logs (Loki)
+Frontends are represented through Blackbox synthetic availability plus approved browser/OpenTelemetry web telemetry. Browsers never receive infrastructure datasource credentials, provider credentials or observability write credentials.
 
-JSON logs should contain fields where relevant:
+## Structured logs and Loki
+
+Logs are JSON and use the canonical bounded stream dimensions. Protected structured fields may include:
 
 - `timestamp`
 - `level`
-- `codestra_business`
-- `service`
-- `environment`
-- `event`
+- `event_family`
+- `operation`
+- `result`
 - `error_code`
+- `request_id`
 - `correlation_id`
 - `trace_id`
 - `deployment_sha`
-- `tenant_id` (field only; never a Loki label)
+- a redacted internal object reference when operationally necessary
 
-Secrets, access tokens, passwords, API keys, broker/exchange credentials, card/bank data, and sensitive PII must be redacted before ingestion.
+Alloy and OpenTelemetry redact before forwarding. Authorization headers, cookies, passwords, API keys, private keys, client secrets, database DSNs, broker/exchange credentials, raw payment/lending/communications payloads and sensitive personal data are forbidden.
 
-Deployment systems should emit `event="deployment"`, configuration authorities `event="config_change"`, and capability systems `event="feature_flag_change"` so the incident dashboard can answer “what changed?”.
+Customer-level identifiers may exist only in a separately authorized protected investigation stream when a documented operational need exists. The default corporate Grafana organization and generated dashboards do not claim or provide customer-level data authority.
 
-## OpenTelemetry / Tempo
+Deployment systems emit `event_family="deployment"`, configuration authorities emit `event_family="configuration"`, and capability systems emit `event_family="feature_flag"` or `event_family="capability"`. This lets the incident view answer “what changed?” without storing raw deployment secrets or payloads.
 
-Required resource attributes:
+## OpenTelemetry and Tempo
+
+Required resource attributes are:
 
 - `service.name`
+- `service.namespace`
 - `service.version`
-- `deployment.environment`
+- `deployment.environment.name`
+- `deployment.id`
+- `cloud.region` or approved `codestra.region`
 - `codestra.business`
-- `codestra.correlation_id` when safe and applicable
-- `deployment.sha`
+- approved server/host identity
 
-Trace context must propagate across Caddy -> Kong -> Middleware -> owned downstream service. The original application correlation ID should also be preserved.
+Trace context propagates through the owned request path. Trace and correlation IDs are searchable fields and exemplars, not metric or log-stream labels. Spans must not carry credentials, raw bodies, account/customer identifiers, order IDs or financial signing material as unbounded attributes.
 
-## Alerts
+## SLO and incident presentation
 
-Prometheus evaluates metrics; Alertmanager groups/routes alerts. Any business-side notification or incident mutation should be handed to Middleware rather than allowing Grafana/Alertmanager to become an independent cross-system write authority.
+Prometheus evaluates metrics and SLO/error-budget rules. Alertmanager groups and routes alert state. Grafana displays and correlates that state but Grafana-managed alerting remains disabled.
 
-Every alert should include:
+Every actionable alert must provide:
 
-- severity
-- business
-- service
-- environment
-- summary
-- runbook URL
-- dashboard URL
-- correlation/trace link when available
+- `severity`
+- `owner`
+- `codestra_business`
+- `service`
+- `environment`
+- summary and description
+- HTTPS runbook URL
 
-## Beyvra trading safety
+Region, deployment and dashboard/trace context may be added when present. Direct Grafana receivers, dashboard buttons, or plugins that mutate an incident or business system are not approved.
 
-Beyvra dashboards are strictly read-only operational views. Grafana, Prometheus, Loki, Tempo, Alertmanager, Alloy, and OpenTelemetry must never possess broker/exchange trade-signing credentials and must never expose an action that can place, modify, cancel, or authorize a trade. Production trading secrets belong in OpenBao and are retrieved only by explicitly authorized backend/execution workloads.
+## Identity and business access
+
+Keycloak authenticates users through Authorization Code + PKCE. Approved realm roles are:
+
+- `observability-viewer` → Viewer
+- `observability-operator` → Editor
+- `observability-admin` → GrafanaAdmin
+
+Folder permissions are presentation controls, not datasource isolation. Business-specific non-corporate access is not considered isolated until Keycloak team membership, folder permissions, datasource tenant enforcement and cross-business denial tests are all proven. Default business teams remain Viewer.
+
+## Beyvra financial and trading boundary
+
+Beyvra dashboards may show aggregate availability, latency, provider health, reconciliation state, error rate, market-data freshness and capability state. Grafana, Prometheus, Loki, Tempo, Alertmanager, Alloy and OpenTelemetry never possess broker/exchange signing credentials and never expose an action that can place, modify, cancel or authorize a trade. They are not authoritative balance, position, execution or ledger systems.
 
 ## Ownership
 
-`codestra/business-registry.json` is the Grafana-side registry of business/service names. Product repositories remain authoritative for their application code. Prometheus owns scrape/recording rule configuration, Loki log storage, Tempo trace storage, Alertmanager alert routing, Keycloak identity, and OpenBao secrets.
+- Grafana owns source-controlled operational presentation and correlation.
+- Prometheus owns metrics, recording rules, SLO evaluation and alert evaluation.
+- Loki owns log storage and query.
+- Tempo owns trace storage and query.
+- Alertmanager owns alert grouping/routing.
+- OpenTelemetry and Alloy own governed collection and normalization.
+- Keycloak owns human identity.
+- OpenBao owns secrets and PKI.
+- Product repositories remain authoritative for business behavior and instrumentation.
+
+Merging this contract does not activate a datasource, deploy Grafana, create an OIDC client, apply RBAC, expose a port, or authorize any business mutation.
