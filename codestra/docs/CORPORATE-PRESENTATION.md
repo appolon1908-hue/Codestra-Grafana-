@@ -2,66 +2,107 @@
 
 ## Corporate objective
 
-`graf.codestra.media` is the primary operational observability portal for Codestra and the businesses it operates. The landing experience must present the portfolio as one managed enterprise while preserving business, environment and security boundaries.
+`graf.codestra.media` is the primary operational observability portal for Codestra and the businesses it manages. The experience presents the portfolio as one professionally operated enterprise while preserving business, environment, security, financial and data-access boundaries.
+
+Grafana answers operational questions; it does not replace Superset business intelligence, Odoo workflow, product administration, customer support systems, provider consoles or financial ledgers.
 
 ## Corporate landing dashboard
 
-The home experience should show:
+The default executive experience shows:
 
-- overall platform availability;
-- active critical/high incidents;
-- business health scorecards;
-- SLO/error-budget status;
-- public endpoint/TLS health;
-- API error/latency summary;
-- queue/backlog summary;
-- database/cache saturation summary;
-- deployment/config changes in the selected time window;
-- security/authentication events;
-- provider/dependency health.
+- total platform and business-service availability;
+- firing critical, high and warning incidents;
+- health by managed business;
+- SLO/error-budget burn status;
+- public endpoint, DNS and TLS health from approved probes;
+- API traffic, error and p95 latency summaries;
+- queue, worker, inbox and outbox health;
+- database, cache, host and container saturation signals;
+- deployment, configuration and capability changes in the selected time window;
+- authentication, authorization, reconciliation and security signals;
+- provider and dependency health.
+
+Every page starts with a summary and then offers drill-down to metrics, redacted logs and traces. No page includes a business-mutation control.
 
 ## Managed business portfolio
 
-Corporate navigation must include Codestra, MoneyBee, Beyvra Trading, Breero, LARIM-A, Transportation/Freight, Booked4Seasons, Codestra Social, Klyrow Email, Telnexa SMS, Kyqra, Restaurant and Codestra Provisioning. Shared platform services are represented separately as platform dependencies.
+Corporate navigation represents:
 
-Each business view should provide:
+1. Codestra
+2. MoneyBee
+3. Beyvra Trading
+4. Breero
+5. LARIM-A
+6. Transportation and Freight
+7. Booked4Seasons
+8. Codestra Social
+9. Klyrow Email
+10. Telnexa Messaging
+11. Kyqra
+12. Restaurant Platform
+13. Codestra Provisioning
 
-1. availability and SLO status;
-2. frontend/backend/service health;
-3. errors and latency;
-4. dependency/provider state;
-5. database/cache/queue health where applicable;
-6. security/authentication signals;
-7. active alerts;
-8. recent deployments/config changes;
-9. links from metrics to traces and logs;
-10. safe incident/customer impact evidence where authorized.
+Shared platform dependencies are presented separately under the `platform` business scope.
+
+Each business view provides:
+
+- availability and SLO state;
+- frontend/backend/service health;
+- traffic, error and latency trends;
+- dependency and provider state;
+- database/cache/queue health when applicable;
+- security and authentication signals;
+- firing alert state;
+- current deployment/version evidence;
+- recent deployment, configuration and capability changes;
+- metric-to-trace and trace-to-redacted-log correlation;
+- safe aggregate impact indicators.
+
+The corporate portal does not claim customer-level data access. Any separately approved restricted investigation path requires its own data controls, access evidence and auditing.
 
 ## Persona views
 
-- Executive: health, incident count, SLO attainment, business impact and trend summary.
-- SRE/Platform: infrastructure, capacity, dependencies, deployments, alerts and deep diagnostics.
-- Security: authentication failures, authorization denials, secret/audit events and suspicious operational signals.
-- Business operator: business-specific health and SLA views without infrastructure-admin authority.
-- Viewer: read-only safe dashboards.
+### Executive viewer
+
+Read-only health, incident count, SLO/error-budget state, aggregate business impact and trend summaries. No raw infrastructure secrets, payloads or business controls.
+
+### SRE and platform operator
+
+Operational dashboards, Explore, infrastructure/capacity analysis, dependency correlation and source-controlled dashboard improvement. Business-system mutations and provider writes remain outside Grafana.
+
+### Security operator
+
+Authentication failure, authorization denial, protected audit, capability-state and suspicious operational signals. Access to sensitive log streams requires separate approval and is not inferred from a Grafana folder role.
+
+### Business viewer
+
+Read-only aggregate health for the approved business. Folder permission alone does not prove datasource isolation; business-specific access is released only after Keycloak team mapping, tenant-aware datasources and cross-business denial tests are evidenced.
+
+### Grafana administrator
+
+Platform administration through the approved `observability-admin` realm role. This role does not grant OpenBao, product-admin, communications, lending, trading or infrastructure-shell authority.
 
 ## Incident question
 
-Every incident flow is designed to answer: **What is broken, where, since when, which business/customer is affected, and what changed?**
+Every incident flow is designed to answer:
 
-Prometheus supplies metrics and SLO state; Alertmanager supplies active/resolved alert state; Loki supplies structured log evidence; Tempo supplies traces; deployment/config telemetry supplies change context.
+> **What is broken, where, since when, which Codestra business is affected, what is the safe aggregate impact, who owns it, and what changed?**
 
-## Beyvra trading safety
+Prometheus supplies metrics and SLO state; Alertmanager supplies firing/resolved incident state; Loki supplies redacted structured log evidence; Tempo supplies traces; deployment/configuration telemetry supplies change context.
 
-Beyvra dashboards are operational views only. Grafana must not receive broker/exchange signing secrets, execute orders, authorize trades, mutate positions, or become an authoritative balance/execution ledger. Trading health may include safe aggregate latency, provider health, reconciliation state, errors, market-data freshness and capability state.
+## Beyvra financial and trading safety
+
+Beyvra dashboards are operational views only. Grafana never receives broker/exchange signing secrets, executes orders, authorizes trades, mutates positions, or becomes an authoritative balance/execution ledger. Trading health may include aggregate latency, provider health, reconciliation state, errors, market-data freshness and externally effective capability state.
 
 ## Corporate design principles
 
-- consistent folder naming and dashboard titles;
-- Codestra business/service/environment variables on every relevant dashboard;
-- clean summary-first layout with drill-down links;
-- no secret-bearing panels or datasource configuration in dashboard JSON;
-- no customer PII in dashboard labels;
-- Git-managed provisioning and reviewable changes;
-- Viewer by default, explicit Editor/Admin separation;
-- Keycloak SSO as the identity boundary.
+- Codestra ownership is visible in titles, navigation and descriptions.
+- Business, application, service, environment, region and deployment selectors are consistent.
+- Summary-first layouts use clear operational language and bounded time windows.
+- Provisioned dashboards and datasources are immutable and source-controlled.
+- Viewer is the default; operator and administrator authority are explicit.
+- Keycloak Authorization Code + PKCE is the human identity boundary.
+- Metrics, logs and traces use internal datasource endpoints only.
+- No customer PII, credentials, raw payloads or high-cardinality identifiers appear as labels.
+- No direct email, SMS, voice, Odoo, n8n, provider or trading action exists in a dashboard.
+- Grafana-managed alerting, public dashboards, anonymous access, SMTP and local login are disabled.
