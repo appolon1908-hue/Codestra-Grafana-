@@ -1,0 +1,101 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "text",
+      "title": "Codestra Corporate Operations",
+      "id": 1,
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "# Codestra Corporate Operations\n\nA single governed view of service health, customer impact, incidents, security posture, capacity, and change outcomes across the Codestra portfolio.\n\n**Businesses represented:** Codestra · MoneyBee · Beyvra · Breero · LARIM-A · Transportation · Booked4Seasons · Codestra Social · Klyrow · Telnexa · Kyqra · Restaurant · Provisioning\n\nUse the approved folders below. Business roles see only their assigned business. Global operational access requires an explicit Codestra Keycloak role."
+      }
+    },
+    {
+      "type": "dashlist",
+      "title": "Executive and Portfolio Scorecards",
+      "id": 2,
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 7},
+      "options": {
+        "keepTime": false,
+        "includeVars": false,
+        "showStarred": false,
+        "showRecentlyViewed": false,
+        "showSearch": false,
+        "showHeadings": true,
+        "maxItems": 30,
+        "query": "",
+        "tags": ["codestra", "executive"]
+      }
+    },
+    {
+      "type": "dashlist",
+      "title": "SRE and Service Health",
+      "id": 3,
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 7},
+      "options": {
+        "keepTime": true,
+        "includeVars": true,
+        "showStarred": false,
+        "showRecentlyViewed": false,
+        "showSearch": false,
+        "showHeadings": true,
+        "maxItems": 50,
+        "query": "",
+        "tags": ["codestra", "sre"]
+      }
+    },
+    {
+      "type": "dashlist",
+      "title": "Security, Identity, and Secrets",
+      "id": 4,
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 16},
+      "options": {
+        "keepTime": true,
+        "includeVars": true,
+        "showStarred": false,
+        "showRecentlyViewed": false,
+        "showSearch": false,
+        "showHeadings": true,
+        "maxItems": 30,
+        "query": "",
+        "tags": ["codestra", "security"]
+      }
+    },
+    {
+      "type": "dashlist",
+      "title": "Business Operations",
+      "id": 5,
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 16},
+      "options": {
+        "keepTime": true,
+        "includeVars": true,
+        "showStarred": false,
+        "showRecentlyViewed": false,
+        "showSearch": false,
+        "showHeadings": true,
+        "maxItems": 50,
+        "query": "",
+        "tags": ["codestra", "business"]
+      }
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["codestra", "corporate", "home"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Codestra Corporate Operations",
+  "uid": "codestra-corporate-home",
+  "version": 1,
+  "weekStart": "monday"
+}
