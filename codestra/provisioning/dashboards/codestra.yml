@@ -1,0 +1,134 @@
+apiVersion: 1
+
+providers:
+  - name: Codestra Executive
+    orgId: 1
+    folder: Executive
+    folderUid: codestra-executive
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/executive
+
+  - name: Codestra Incident
+    orgId: 1
+    folder: Incident Triage
+    folderUid: codestra-incident
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/incident
+
+  - name: Codestra Platform
+    orgId: 1
+    folder: Platform
+    folderUid: codestra-platform
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/platform
+
+  - name: Codestra Business
+    orgId: 1
+    folder: Business and Applications
+    folderUid: codestra-business
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/business
+
+  - name: Codestra Environment
+    orgId: 1
+    folder: Environment
+    folderUid: codestra-environment
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/environment
+
+  - name: Codestra Server
+    orgId: 1
+    folder: Server
+    folderUid: codestra-server
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/server
+
+  - name: Codestra Database
+    orgId: 1
+    folder: Database
+    folderUid: codestra-database
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/database
+
+  - name: Codestra API
+    orgId: 1
+    folder: API
+    folderUid: codestra-api
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/api
+
+  - name: Codestra Security
+    orgId: 1
+    folder: Security
+    folderUid: codestra-security
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/security
+
+  - name: Codestra Contact Center
+    orgId: 1
+    folder: Contact Center and Campaigns
+    folderUid: codestra-contact-center
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/contact-center
+
+  - name: Codestra Deployment
+    orgId: 1
+    folder: Deployment and Version
+    folderUid: codestra-deployment
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/deployment
+
+  - name: Codestra SLO
+    orgId: 1
+    folder: SLO and Error Budget
+    folderUid: codestra-slo
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/codestra-dashboards/slo

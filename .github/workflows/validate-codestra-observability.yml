@@ -1,0 +1,37 @@
+name: Validate Codestra observability control plane
+
+on:
+  pull_request:
+    paths:
+      - 'codestra/**'
+      - 'scripts/generate_codestra_dashboards.py'
+      - 'scripts/validate_codestra_observability.py'
+      - '.github/workflows/validate-codestra-observability.yml'
+  push:
+    branches:
+      - main
+      - staging
+      - production
+    paths:
+      - 'codestra/**'
+      - 'scripts/generate_codestra_dashboards.py'
+      - 'scripts/validate_codestra_observability.py'
+      - '.github/workflows/validate-codestra-observability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Codestra scripts
+        run: python3 -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py
+      - name: Validate registry, hostnames, provisioning, RBAC, and dashboards
+        run: python3 scripts/validate_codestra_observability.py
+      - name: Ensure generated dashboards contain no committed secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ! grep -RInE '(api[_-]?key|client[_-]?secret|password|token)[[:space:]]*[:=][[:space:]]*[A-Za-z0-9/+_.-]{16,}' codestra/dashboards

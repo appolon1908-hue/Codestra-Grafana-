@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "organization": "Codestra",
+  "default_org_role": "Viewer",
+  "oauth_role_groups": {
+    "grafana-admin": "Admin",
+    "grafana-editor": "Editor",
+    "default": "Viewer"
+  },
+  "teams": [
+    {"name": "codestra-platform-sre", "scope": "platform", "permission": "Edit"},
+    {"name": "codestra-security", "scope": "security", "permission": "Edit"},
+    {"name": "codestra-contact-center", "scope": "contact-center", "permission": "Edit"},
+    {"name": "codestra-business-codestra", "scope": "business:codestra", "permission": "Edit"},
+    {"name": "codestra-business-moneybee", "scope": "business:moneybee", "permission": "Edit"},
+    {"name": "codestra-business-beyvra", "scope": "business:beyvra", "permission": "Edit"},
+    {"name": "codestra-business-breero", "scope": "business:breero", "permission": "Edit"},
+    {"name": "codestra-business-larim-a", "scope": "business:larim-a", "permission": "Edit"},
+    {"name": "codestra-business-transportation", "scope": "business:transportation", "permission": "Edit"},
+    {"name": "codestra-business-booked4seasons", "scope": "business:booked4seasons", "permission": "Edit"},
+    {"name": "codestra-business-social", "scope": "business:social", "permission": "Edit"},
+    {"name": "codestra-business-klyrow", "scope": "business:klyrow", "permission": "Edit"},
+    {"name": "codestra-business-telnexa", "scope": "business:telnexa", "permission": "Edit"},
+    {"name": "codestra-business-kyqra", "scope": "business:kyqra", "permission": "Edit"},
+    {"name": "codestra-business-restaurant", "scope": "business:restaurant", "permission": "Edit"}
+  ],
+  "folder_owners": {
+    "codestra-executive": ["codestra-platform-sre"],
+    "codestra-incident": ["codestra-platform-sre", "codestra-security"],
+    "codestra-platform": ["codestra-platform-sre"],
+    "codestra-environment": ["codestra-platform-sre"],
+    "codestra-server": ["codestra-platform-sre"],
+    "codestra-database": ["codestra-platform-sre"],
+    "codestra-api": ["codestra-platform-sre"],
+    "codestra-security": ["codestra-security"],
+    "codestra-contact-center": ["codestra-contact-center"],
+    "codestra-deployment": ["codestra-platform-sre"],
+    "codestra-slo": ["codestra-platform-sre"],
+    "codestra-business": ["codestra-platform-sre"]
+  },
+  "oss_note": "Keycloak OAuth role mapping is automatic. Grafana OSS team membership is managed through Grafana administration/API; external Team Sync is not assumed by this repository."
+}

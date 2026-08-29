@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "canonical_grafana_host": "graf.codestra.media",
+  "datasource_hosts": {
+    "prometheus": "prom.codestra.media",
+    "loki": "loki.codestra.media",
+    "tempo": "temp.codestra.media",
+    "alertmanager": "aler.codestra.media"
+  },
+  "businesses": [
+    {
+      "id": "codestra",
+      "display_name": "Codestra",
+      "team": "codestra-business-codestra",
+      "repositories": [
+        {"repo": "appolon1908-hue/codestra", "service": "codestra-web", "profile": "frontend"},
+        {"repo": "appolon1908-hue/codestra-backend", "service": "codestra-backend", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "moneybee",
+      "display_name": "MoneyBee",
+      "team": "codestra-business-moneybee",
+      "repositories": [
+        {"repo": "appolon1908-hue/Moneybee-frontend-", "service": "moneybee-frontend", "profile": "frontend"},
+        {"repo": "appolon1908-hue/Moneybee-Backend", "service": "moneybee-backend", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "beyvra",
+      "display_name": "Beyvra Trading",
+      "team": "codestra-business-beyvra",
+      "criticality": "financial-trading",
+      "repositories": [
+        {"repo": "appolon1908-hue/beyvra-frontend", "service": "beyvra-frontend", "profile": "frontend"},
+        {"repo": "appolon1908-hue/beyvra-backend", "service": "beyvra-backend", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "breero",
+      "display_name": "Breero",
+      "team": "codestra-business-breero",
+      "repositories": [
+        {"repo": "appolon1908-hue/Breero.com", "service": "breero-platform", "profile": "fullstack"}
+      ]
+    },
+    {
+      "id": "larim-a",
+      "display_name": "LARIM-A",
+      "team": "codestra-business-larim-a",
+      "repositories": [
+        {"repo": "appolon1908-hue/LARIM-A-Fornt-end", "service": "larim-a-frontend", "profile": "frontend"},
+        {"repo": "appolon1908-hue/LARIM-A-Backend", "service": "larim-a-backend", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "transportation",
+      "display_name": "Transportation / Freight",
+      "team": "codestra-business-transportation",
+      "repositories": [
+        {"repo": "appolon1908-hue/transportaion-Frontend", "service": "transportation-frontend", "profile": "frontend"},
+        {"repo": "appolon1908-hue/transportation-backend-", "service": "transportation-backend", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "booked4seasons",
+      "display_name": "Booked4Seasons",
+      "team": "codestra-business-booked4seasons",
+      "repositories": [
+        {"repo": "appolon1908-hue/booked4seasons", "service": "booked4seasons", "profile": "fullstack"}
+      ]
+    },
+    {
+      "id": "social",
+      "display_name": "Codestra Social",
+      "team": "codestra-business-social",
+      "repositories": [
+        {"repo": "appolon1908-hue/social.codestra.co", "service": "social-codestra", "profile": "fullstack"}
+      ]
+    },
+    {
+      "id": "klyrow",
+      "display_name": "Klyrow Email",
+      "team": "codestra-business-klyrow",
+      "repositories": [
+        {"repo": "appolon1908-hue/klyrow-Website-", "service": "klyrow-web", "profile": "frontend"},
+        {"repo": "appolon1908-hue/klyrow.com", "service": "klyrow-email", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "telnexa",
+      "display_name": "Telnexa SMS",
+      "team": "codestra-business-telnexa",
+      "repositories": [
+        {"repo": "appolon1908-hue/Telnexa-web", "service": "telnexa-web", "profile": "frontend"},
+        {"repo": "appolon1908-hue/telnexa", "service": "telnexa-sms", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "kyqra",
+      "display_name": "Kyqra Crawler",
+      "team": "codestra-business-kyqra",
+      "repositories": [
+        {"repo": "appolon1908-hue/kyqra-crawler", "service": "kyqra-crawler", "profile": "backend"}
+      ]
+    },
+    {
+      "id": "restaurant",
+      "display_name": "Restaurant",
+      "team": "codestra-business-restaurant",
+      "repositories": [
+        {"repo": "appolon1908-hue/Frontend-Resturant-", "service": "restaurant-frontend", "profile": "frontend"}
+      ]
+    },
+    {
+      "id": "provisioning",
+      "display_name": "Codestra Provisioning",
+      "team": "codestra-platform-sre",
+      "repositories": [
+        {"repo": "appolon1908-hue/codestra-provisioning-service", "service": "codestra-provisioning", "profile": "backend"}
+      ]
+    }
+  ],
+  "platform_services": [
+    {"repo": "appolon1908-hue/Caddy", "service": "caddy", "domain": "edge"},
+    {"repo": "appolon1908-hue/Kong", "service": "kong", "domain": "api-gateway"},
+    {"repo": "appolon1908-hue/Keycloak", "service": "keycloak", "domain": "identity"},
+    {"repo": "appolon1908-hue/Middleware-", "service": "middleware", "domain": "control-plane"},
+    {"repo": "appolon1908-hue/Odoo", "service": "odoo", "domain": "crm"},
+    {"repo": "appolon1908-hue/N8N", "service": "n8n", "domain": "orchestration"},
+    {"repo": "appolon1908-hue/Vicidialer-Codestra", "service": "vicidial", "domain": "voice"}
+  ],
+  "non_runtime_or_deferred": [
+    {"repo": "appolon1908-hue/SDK-repository", "reason": "developer contracts/tooling; monitor CI/release separately"},
+    {"repo": "appolon1908-hue/communication-platform-", "reason": "architecture/coordination repository"},
+    {"repo": "appolon1908-hue/codestra-production-platform", "reason": "historical/reference deployment evidence"},
+    {"repo": "appolon1908-hue/backend2", "reason": "unclassified legacy/secondary backend; ownership must be resolved before runtime dashboard assignment"},
+    {"repo": "appolon1908-hue/scrapper", "reason": "legacy/general scraper; canonical crawler runtime is kyqra-crawler"},
+    {"repo": "appolon1908-hue/kyqra", "reason": "legacy Kyqra shell/reference"},
+    {"repo": "appolon1908-hue/Codestraxxxx", "reason": "empty/placeholder repository"}
+  ]
+}
