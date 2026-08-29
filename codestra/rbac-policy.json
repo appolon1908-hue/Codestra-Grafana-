@@ -1,28 +1,39 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "organization": "Codestra",
+  "status": "POLICY_PREPARED_NOT_APPLIED",
   "default_org_role": "Viewer",
-  "oauth_role_groups": {
-    "grafana-admin": "Admin",
-    "grafana-editor": "Editor",
-    "default": "Viewer"
+  "oauth_realm_roles": {
+    "observability-admin": "GrafanaAdmin",
+    "observability-operator": "Editor",
+    "observability-viewer": "Viewer"
+  },
+  "privilege_rules": {
+    "anonymous_access": false,
+    "local_login_form": false,
+    "initial_local_admin": false,
+    "viewer_can_edit": false,
+    "provisioned_dashboards_are_read_only": true,
+    "business_teams_default_to_view": true,
+    "grafana_managed_alerts": false
   },
   "teams": [
     {"name": "codestra-platform-sre", "scope": "platform", "permission": "Edit"},
     {"name": "codestra-security", "scope": "security", "permission": "Edit"},
     {"name": "codestra-contact-center", "scope": "contact-center", "permission": "Edit"},
-    {"name": "codestra-business-codestra", "scope": "business:codestra", "permission": "Edit"},
-    {"name": "codestra-business-moneybee", "scope": "business:moneybee", "permission": "Edit"},
-    {"name": "codestra-business-beyvra", "scope": "business:beyvra", "permission": "Edit"},
-    {"name": "codestra-business-breero", "scope": "business:breero", "permission": "Edit"},
-    {"name": "codestra-business-larim-a", "scope": "business:larim-a", "permission": "Edit"},
-    {"name": "codestra-business-transportation", "scope": "business:transportation", "permission": "Edit"},
-    {"name": "codestra-business-booked4seasons", "scope": "business:booked4seasons", "permission": "Edit"},
-    {"name": "codestra-business-social", "scope": "business:social", "permission": "Edit"},
-    {"name": "codestra-business-klyrow", "scope": "business:klyrow", "permission": "Edit"},
-    {"name": "codestra-business-telnexa", "scope": "business:telnexa", "permission": "Edit"},
-    {"name": "codestra-business-kyqra", "scope": "business:kyqra", "permission": "Edit"},
-    {"name": "codestra-business-restaurant", "scope": "business:restaurant", "permission": "Edit"}
+    {"name": "codestra-business-codestra", "scope": "business:codestra", "permission": "View"},
+    {"name": "codestra-business-moneybee", "scope": "business:moneybee", "permission": "View"},
+    {"name": "codestra-business-beyvra", "scope": "business:beyvra", "permission": "View"},
+    {"name": "codestra-business-breero", "scope": "business:breero", "permission": "View"},
+    {"name": "codestra-business-larim-a", "scope": "business:larim-a", "permission": "View"},
+    {"name": "codestra-business-transportation", "scope": "business:transportation", "permission": "View"},
+    {"name": "codestra-business-booked4seasons", "scope": "business:booked4seasons", "permission": "View"},
+    {"name": "codestra-business-social", "scope": "business:social", "permission": "View"},
+    {"name": "codestra-business-klyrow", "scope": "business:klyrow", "permission": "View"},
+    {"name": "codestra-business-telnexa", "scope": "business:telnexa", "permission": "View"},
+    {"name": "codestra-business-kyqra", "scope": "business:kyqra", "permission": "View"},
+    {"name": "codestra-business-restaurant", "scope": "business:restaurant", "permission": "View"},
+    {"name": "codestra-business-provisioning", "scope": "business:provisioning", "permission": "View"}
   ],
   "folder_owners": {
     "codestra-executive": ["codestra-platform-sre"],
@@ -33,10 +44,21 @@
     "codestra-database": ["codestra-platform-sre"],
     "codestra-api": ["codestra-platform-sre"],
     "codestra-security": ["codestra-security"],
-    "codestra-contact-center": ["codestra-contact-center"],
+    "codestra-contact-center": ["codestra-contact-center", "codestra-platform-sre"],
     "codestra-deployment": ["codestra-platform-sre"],
     "codestra-slo": ["codestra-platform-sre"],
     "codestra-business": ["codestra-platform-sre"]
   },
-  "oss_note": "Keycloak OAuth role mapping is automatic. Grafana OSS team membership is managed through Grafana administration/API; external Team Sync is not assumed by this repository."
+  "data_access_boundary": {
+    "folder_permissions_are_not_datasource_isolation": true,
+    "aggregate_business_telemetry_only": true,
+    "customer_or_person_level_data_forbidden": true,
+    "business_specific_noncorporate_access_requires": [
+      "proven_keycloak_team_membership_sync_or_separate_org",
+      "datasource_tenant_isolation",
+      "cross_business_denial_tests",
+      "audited_folder_permissions"
+    ]
+  },
+  "oss_note": "Generic OAuth maps organization roles. Grafana OSS external team synchronization is not assumed; team and folder permissions must be applied and evidenced through a reviewed administrative process before business-scoped access is claimed."
 }
