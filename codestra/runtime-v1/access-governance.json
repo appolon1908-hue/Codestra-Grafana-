@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "platformName": "Codestra Corporate Operations",
+  "globalKeycloakRoles": {
+    "grafana-admin": "GrafanaAdmin",
+    "grafana-editor": "Editor",
+    "grafana-viewer": "Viewer"
+  },
+  "businesses": [
+    "codestra",
+    "moneybee",
+    "beyvra",
+    "breero",
+    "larim-a",
+    "transportation",
+    "booked4seasons",
+    "social",
+    "klyrow",
+    "telnexa",
+    "kyqra",
+    "restaurant",
+    "provisioning"
+  ],
+  "businessFolderModel": {
+    "folderPattern": "Business / <codestra_business>",
+    "viewerRolePattern": "grafana-business-<codestra_business>-viewer",
+    "editorRolePattern": "grafana-business-<codestra_business>-editor",
+    "defaultCrossBusinessAccess": false,
+    "folderPermissionsProvisionedFromCode": true,
+    "dashboardCreationInGeneralFolderAllowed": false
+  },
+  "corporateFolders": [
+    "00 Corporate Overview",
+    "01 Platform and Edge",
+    "02 Identity and Access",
+    "03 Communications",
+    "04 Business Operations",
+    "05 Data and Storage",
+    "06 Security and Secrets",
+    "07 SLO and Error Budgets",
+    "08 Incidents and Changes",
+    "09 Capacity and Cost"
+  ],
+  "requiredDashboardTags": [
+    "codestra",
+    "owner:<team>",
+    "environment:<environment>",
+    "business:<codestra_business>",
+    "class:executive|sre|security|business"
+  ],
+  "requiredDashboardFeatures": [
+    "business selector with bounded values",
+    "environment selector",
+    "service selector",
+    "server selector where relevant",
+    "deployment annotation",
+    "incident annotation",
+    "SLO or threshold context",
+    "owner and runbook link",
+    "no-data state",
+    "partial-data state",
+    "stale-data state"
+  ],
+  "datasourceRules": {
+    "credentialsFromOpenBaoFiles": true,
+    "editableInBrowser": false,
+    "defaultDatasourcePerSignal": true,
+    "lokiDerivedFieldsLinkToTempo": true,
+    "prometheusExemplarsLinkToTempo": true,
+    "tempoServiceGraphsUsePrometheus": true,
+    "crossBusinessDatasourceByDefault": false
+  },
+  "privacyRules": {
+    "customerIdAsDashboardVariable": false,
+    "tenantIdAsMetricLabel": false,
+    "emailOrPhoneAsVariable": false,
+    "rawMessageBodyDisplayed": false,
+    "rawRequestOrResponseBodyDisplayed": false,
+    "traceSearchByProtectedIdentifier": false
+  },
+  "sensitiveBusinessBoundaries": {
+    "beyvra": {
+      "allowed": ["health", "latency", "market-data freshness", "provider state", "reconciliation state", "aggregate risk control state"],
+      "forbidden": ["broker credentials", "signing keys", "trade authorization", "customer instructions", "raw account secrets"]
+    },
+    "moneybee": {
+      "allowed": ["service health", "workflow SLA", "aggregate funnel", "provider state"],
+      "forbidden": ["raw credit reports", "government identifiers", "bank account data", "document contents"]
+    },
+    "klyrow": {
+      "allowed": ["aggregate delivery state", "provider latency", "queue health"],
+      "forbidden": ["email bodies", "authentication tokens", "full recipient addresses"]
+    },
+    "telnexa": {
+      "allowed": ["aggregate delivery state", "provider latency", "queue health"],
+      "forbidden": ["SMS bodies", "full destination numbers", "provider credentials"]
+    }
+  }
+}
