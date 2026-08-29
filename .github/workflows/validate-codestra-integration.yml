@@ -1,0 +1,26 @@
+name: Validate Codestra Grafana integration
+
+on:
+  pull_request:
+    paths:
+      - config/codestra/**
+      - scripts/validate-codestra-integration.py
+      - .github/workflows/validate-codestra-integration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate configuration contract
+        run: python3 scripts/validate-codestra-integration.py
