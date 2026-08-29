@@ -1,0 +1,79 @@
+name: codestra-grafana
+
+services:
+  grafana:
+    image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE must be an immutable image digest}
+    restart: unless-stopped
+    user: "472:472"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - --config=/etc/grafana/grafana.ini
+      - --homepath=/usr/share/grafana
+    env_file:
+      - ${GRAFANA_RUNTIME_ENV_FILE:?OpenBao must render the non-file Grafana runtime environment}
+    environment:
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_PATHS_LOGS: /var/log/grafana
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./codestra-corporate-home.json:/var/lib/grafana/codestra-home/codestra-corporate-home.json:ro
+      - ${GRAFANA_PROVISIONING_DIR:?mount the reviewed Codestra provisioning tree}:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    secrets:
+      - grafana_database_password
+      - grafana_admin_password
+      - grafana_secret_key
+      - grafana_oauth_client_secret
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /var/log/grafana:size=128m,mode=0750,uid=472,gid=472
+    networks:
+      - codestra_observability
+      - codestra_data
+      - codestra_security
+    stop_grace_period: 45s
+    labels:
+      com.codestra.business: codestra
+      com.codestra.application: observability
+      com.codestra.service: grafana
+      com.codestra.environment: ${CODESTRA_ENVIRONMENT:?set environment}
+      com.codestra.deployment: ${CODESTRA_DEPLOYMENT:?set immutable deployment identifier}
+      com.codestra.owner: platform-observability
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "0.50"
+          memory: 1G
+
+secrets:
+  grafana_database_password:
+    file: ${GRAFANA_DATABASE_PASSWORD_FILE:?mount an OpenBao-rendered database password}
+  grafana_admin_password:
+    file: ${GRAFANA_ADMIN_PASSWORD_FILE:?mount a protected break-glass password}
+  grafana_secret_key:
+    file: ${GRAFANA_SECRET_KEY_FILE:?mount a stable encrypted-session secret}
+  grafana_oauth_client_secret:
+    file: ${GRAFANA_OAUTH_CLIENT_SECRET_FILE:?mount the Keycloak client secret}
+
+volumes:
+  grafana_data:
+
+networks:
+  codestra_observability:
+    external: true
+    name: codestra-observability
+  codestra_data:
+    external: true
+    name: codestra-data
+  codestra_security:
+    external: true
+    name: codestra-security
