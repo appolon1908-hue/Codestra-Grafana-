@@ -10,7 +10,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/executive
+      path: /etc/grafana/codestra-dashboards/executive
+      foldersFromFilesStructure: false
 
   - name: Codestra Incident
     orgId: 1
@@ -21,7 +22,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/incident
+      path: /etc/grafana/codestra-dashboards/incident
+      foldersFromFilesStructure: false
 
   - name: Codestra Platform
     orgId: 1
@@ -32,7 +34,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/platform
+      path: /etc/grafana/codestra-dashboards/platform
+      foldersFromFilesStructure: false
 
   - name: Codestra Business
     orgId: 1
@@ -43,7 +46,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/business
+      path: /etc/grafana/codestra-dashboards/business
+      foldersFromFilesStructure: false
 
   - name: Codestra Environment
     orgId: 1
@@ -54,7 +58,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/environment
+      path: /etc/grafana/codestra-dashboards/environment
+      foldersFromFilesStructure: false
 
   - name: Codestra Server
     orgId: 1
@@ -65,7 +70,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/server
+      path: /etc/grafana/codestra-dashboards/server
+      foldersFromFilesStructure: false
 
   - name: Codestra Database
     orgId: 1
@@ -76,7 +82,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/database
+      path: /etc/grafana/codestra-dashboards/database
+      foldersFromFilesStructure: false
 
   - name: Codestra API
     orgId: 1
@@ -87,7 +94,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/api
+      path: /etc/grafana/codestra-dashboards/api
+      foldersFromFilesStructure: false
 
   - name: Codestra Security
     orgId: 1
@@ -98,7 +106,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/security
+      path: /etc/grafana/codestra-dashboards/security
+      foldersFromFilesStructure: false
 
   - name: Codestra Contact Center
     orgId: 1
@@ -109,7 +118,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/contact-center
+      path: /etc/grafana/codestra-dashboards/contact-center
+      foldersFromFilesStructure: false
 
   - name: Codestra Deployment
     orgId: 1
@@ -120,7 +130,8 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/deployment
+      path: /etc/grafana/codestra-dashboards/deployment
+      foldersFromFilesStructure: false
 
   - name: Codestra SLO
     orgId: 1
@@ -131,4 +142,5 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/codestra-dashboards/slo
+      path: /etc/grafana/codestra-dashboards/slo
+      foldersFromFilesStructure: false
