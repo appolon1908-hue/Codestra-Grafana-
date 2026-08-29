@@ -1,0 +1,80 @@
+name: Validate Codestra Grafana runtime v1
+
+on:
+  pull_request:
+    paths:
+      - "codestra/runtime-v1/**"
+      - ".github/workflows/validate-codestra-runtime-v1.yml"
+  push:
+    branches:
+      - development
+      - test
+      - staging
+      - production
+      - main
+    paths:
+      - "codestra/runtime-v1/**"
+      - ".github/workflows/validate-codestra-runtime-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned YAML parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate identity, dashboard, and access governance
+        shell: python
+        run: |
+          from pathlib import Path
+          import configparser
+          import json
+          import yaml
+
+          root = Path("codestra/runtime-v1")
+          parser = configparser.ConfigParser(interpolation=None)
+          parser.read(root / "grafana.ini")
+          home = json.loads((root / "codestra-corporate-home.json").read_text())
+          governance = json.loads((root / "access-governance.json").read_text())
+          compose_text = (root / "compose.yaml").read_text()
+          compose = yaml.safe_load(compose_text)
+          service = compose["services"]["grafana"]
+
+          required_businesses = {
+              "codestra", "moneybee", "beyvra", "breero", "larim-a",
+              "transportation", "booked4seasons", "social", "klyrow",
+              "telnexa", "kyqra", "restaurant", "provisioning",
+          }
+          assert set(governance["businesses"]) == required_businesses
+          assert parser["auth.basic"].getboolean("enabled") is False
+          assert parser["auth.anonymous"].getboolean("enabled") is False
+          assert parser["auth"].getboolean("disable_login_form") is True
+          assert parser["auth"].getboolean("oauth_auto_login") is True
+          oauth = parser["auth.generic_oauth"]
+          assert oauth.getboolean("enabled") is True
+          assert oauth.getboolean("use_pkce") is True
+          assert oauth.getboolean("role_attribute_strict") is True
+          assert oauth.getboolean("allow_assign_grafana_admin") is True
+          assert "$__file{" in oauth["client_secret"]
+          assert "$__file{" in parser["database"]["password"]
+          assert "$__file{" in parser["security"]["secret_key"]
+          assert parser["analytics"].getboolean("reporting_enabled") is False
+          assert parser["snapshots"].getboolean("external_enabled") is False
+          assert home["uid"] == "codestra-corporate-home"
+          assert {"codestra", "corporate", "home"} <= set(home["tags"])
+          assert any(panel["type"] == "dashlist" for panel in home["panels"])
+          assert governance["businessFolderModel"]["defaultCrossBusinessAccess"] is False
+          assert governance["datasourceRules"]["credentialsFromOpenBaoFiles"] is True
+          assert governance["privacyRules"]["customerIdAsDashboardVariable"] is False
+          assert governance["privacyRules"]["rawMessageBodyDisplayed"] is False
+          assert "ports" not in service
+          assert service["read_only"] is True
+          assert "ALL" in service["cap_drop"]
+          assert len(service["secrets"]) == 4
+          assert "latest" not in compose_text.lower()
+          print("Codestra Grafana runtime validation PASS")
+      - name: Validate Compose structure without resolving runtime files
+        run: docker compose -f codestra/runtime-v1/compose.yaml config --no-interpolate >/dev/null
