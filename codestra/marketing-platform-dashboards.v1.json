@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "status": "CATALOG_PREPARED_NOT_DEPLOYED",
+  "domain": "codestra-marketing-platform",
+  "dashboards": [
+    "platform-executive-health",
+    "kong-edge-api",
+    "keycloak-identity",
+    "middleware-inbox-outbox-retry-dead-letter",
+    "marketing-acquisition-and-sync",
+    "communication-dry-run-and-delivery-state",
+    "social-reconciliation-and-publish-blocked",
+    "odoo-crm-integration",
+    "n8n-workflow-health",
+    "ai-gateway-usage-cost-errors",
+    "postgres-redis-health",
+    "host-container-capacity"
+  ],
+  "datasources": ["prometheus","loki","tempo"],
+  "requiredVariables": ["environment","codestra_business","service","region"],
+  "forbiddenDashboardData": ["access_token","refresh_token","client_secret","password","raw_customer_pii","raw_message_body","raw_prompt_body"],
+  "activation": {"provisioned": false,"productionEnabled": false}
+}
