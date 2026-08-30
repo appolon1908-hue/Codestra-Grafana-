@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "2.0",
+  "service": "grafana",
+  "role": "corporate-operational-observability-portal",
+  "status": "CONFIG_PREPARED_NOT_DEPLOYED",
+  "hostname": "graf.codestra.media",
+  "publicUrl": "https://graf.codestra.media/",
+  "hostBind": "127.0.0.1:3000",
+  "publicNativePortAllowed": false,
+  "edgeRepository": "appolon1908-hue/Caddy",
+  "identityRepository": "appolon1908-hue/Keycloak",
+  "database": {
+    "type": "postgres",
+    "highAvailability": true,
+    "sslMode": "verify-full",
+    "hostFromEnvironment": "GF_DATABASE_HOST",
+    "nameFromEnvironment": "GF_DATABASE_NAME",
+    "userSecretFile": "/run/secrets/grafana_database_user",
+    "passwordSecretFile": "/run/secrets/grafana_database_password",
+    "caSecretFile": "/run/secrets/grafana_database_ca"
+  },
+  "oidc": {
+    "issuer": "https://auth.codestra.co/realms/codestra",
+    "clientId": "grafana-observability",
+    "callback": "https://graf.codestra.media/login/generic_oauth",
+    "pkce": "S256",
+    "clientSecretFile": "/run/secrets/grafana_oidc_client_secret",
+    "localLoginEnabled": false,
+    "anonymousAccessEnabled": false,
+    "initialLocalAdminEnabled": false,
+    "roleClaimPath": "realm_access.roles",
+    "roleMapping": {
+      "observability-viewer": "Viewer",
+      "observability-operator": "Editor",
+      "observability-admin": "GrafanaAdmin"
+    }
+  },
+  "dataSources": [
+    {"id": "prometheus", "uid": "codestra-prometheus", "url": "http://prometheus:9090", "access": "private_proxy"},
+    {"id": "loki", "uid": "codestra-loki", "url": "http://loki-query:3100", "access": "private_proxy"},
+    {"id": "tempo", "uid": "codestra-tempo", "url": "http://tempo:3200", "access": "private_proxy"},
+    {"id": "alertmanager", "uid": "codestra-alertmanager", "url": "http://alertmanager:9093", "access": "private_proxy_read_only"}
+  ],
+  "businessScope": [
+    "codestra",
+    "moneybee",
+    "beyvra",
+    "breero",
+    "larim-a",
+    "transportation",
+    "booked4seasons",
+    "social",
+    "klyrow",
+    "telnexa",
+    "kyqra",
+    "restaurant",
+    "provisioning"
+  ],
+  "authorityBoundaries": {
+    "grafanaManagedAlerting": false,
+    "businessMutation": false,
+    "customerLevelDataAuthority": false,
+    "tradingMutation": false,
+    "communicationsDelivery": false,
+    "folderPermissionsAloneClaimDatasourceIsolation": false
+  },
+  "activation": {
+    "imageBuilt": false,
+    "immutableDigestRecorded": false,
+    "databaseProvisioned": false,
+    "databaseBackupRestoreProven": false,
+    "oidcClientApplied": false,
+    "oidcSecretInstalled": false,
+    "teamAndFolderPermissionsApplied": false,
+    "crossBusinessDenialTestsPassed": false,
+    "privateDatasourcesReachable": false,
+    "caddyRouteActivated": false,
+    "productionApproved": false,
+    "deploymentEnabled": false
+  }
+}
