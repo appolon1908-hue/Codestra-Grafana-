@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: Codestra Intake Operations
+    orgId: 1
+    folder: API / Intake
+    folderUid: codestra-intake
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/intake-dashboards
+      foldersFromFilesStructure: false
