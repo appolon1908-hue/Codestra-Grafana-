@@ -501,6 +501,145 @@ def standard_dashboard(
     }
 
 
+def operations_dashboard_api() -> dict[str, Any]:
+    selector = metric_selector(
+        fixed_business="platform",
+        service_regex="middleware|kong|keycloak",
+    )
+    logs = log_selector(
+        fixed_business="platform",
+        service_regex="middleware|kong|keycloak",
+    )
+    panels = [
+        stat_panel(
+            1,
+            "Dashboard API request rate",
+            f"sum(codestra:operations_dashboard_requests:rate5m{{{selector}}})",
+            0,
+            0,
+            unit="reqps",
+        ),
+        stat_panel(
+            2,
+            "Dashboard API 5xx ratio",
+            f"100 * max(codestra:operations_dashboard_error_ratio:5m{{{selector}}})",
+            6,
+            0,
+            unit="percent",
+            thresholds=[
+                {"color": "green", "value": None},
+                {"color": "orange", "value": 1.0},
+                {"color": "red", "value": 5.0},
+            ],
+        ),
+        stat_panel(
+            3,
+            "Dashboard API p95 latency",
+            f"max(codestra:operations_dashboard_duration_seconds:p95_5m{{{selector}}})",
+            12,
+            0,
+            unit="s",
+            thresholds=[
+                {"color": "green", "value": None},
+                {"color": "orange", "value": 1.0},
+                {"color": "red", "value": 2.0},
+            ],
+        ),
+        stat_panel(
+            4,
+            "Dashboard auth failures",
+            f"sum(codestra:operations_dashboard_auth_failures:rate5m{{{selector}}})",
+            18,
+            0,
+            unit="ops",
+        ),
+        time_series_panel(
+            5,
+            "Dashboard API traffic by endpoint",
+            f"sum by (operation) (codestra:operations_dashboard_requests:rate5m{{{selector}}})",
+            0,
+            6,
+            unit="reqps",
+            width=12,
+            legend="{{operation}}",
+        ),
+        time_series_panel(
+            6,
+            "Dashboard API p95 by endpoint",
+            f"max by (operation) (codestra:operations_dashboard_duration_seconds:p95_5m{{{selector}}})",
+            12,
+            6,
+            unit="s",
+            width=12,
+            legend="{{operation}}",
+        ),
+        table_panel(
+            7,
+            "Release gate status",
+            f"codestra:operations_dashboard_release_gate_state:max{{{selector}}}",
+            0,
+            14,
+            legend="{{gate}} / {{state}}",
+        ),
+        table_panel(
+            8,
+            "Provider canary status",
+            f"codestra:operations_dashboard_canary_state:max{{{selector}}}",
+            0,
+            21,
+            legend="{{provider}} / {{state}}",
+        ),
+        logs_panel(
+            9,
+            "Dashboard API security and read-back context",
+            f'{{{logs}}} | json | component="operations-dashboard"',
+            0,
+            28,
+        ),
+    ]
+    return {
+        "annotations": {
+            "list": [
+                {
+                    "builtIn": 1,
+                    "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+                    "enable": True,
+                    "hide": True,
+                    "iconColor": "rgba(0, 211, 255, 1)",
+                    "name": "Annotations and alerts",
+                    "type": "dashboard",
+                }
+            ]
+        },
+        "description": (
+            "Codestra corporate read-only operations dashboard API view. "
+            "Surfaces endpoint health, auth enforcement, release gates, provider "
+            "canaries, and redacted read-back context without mutation actions."
+        ),
+        "editable": False,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 1,
+        "id": None,
+        "links": [],
+        "liveNow": False,
+        "panels": panels,
+        "refresh": "30s",
+        "schemaVersion": 39,
+        "tags": ["codestra", "corporate", "platform", "operations-dashboard", "api"],
+        "templating": templating(fixed_business="platform"),
+        "time": {"from": "now-6h", "to": "now"},
+        "timepicker": {
+            "refresh_intervals": ["30s", "1m", "5m", "15m", "30m", "1h"],
+            "time_options": ["15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"],
+        },
+        "timezone": "browser",
+        "title": "Operations Dashboard API",
+        "uid": "codestra-operations-dashboard-api",
+        "version": 1,
+        "weekStart": "monday",
+    }
+
+
 def write(folder: str, filename: str, payload: dict[str, Any]) -> None:
     path = OUT / folder / filename
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -559,6 +698,7 @@ def generate_special() -> None:
                 service_regex=services,
             ),
         )
+    write("api", "operations-dashboard-api.json", operations_dashboard_api())
 
 
 def main() -> None:
