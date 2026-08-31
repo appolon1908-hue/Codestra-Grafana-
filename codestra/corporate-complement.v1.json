@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "component": "grafana",
+  "codestraRole": "corporate operational dashboard portal",
+  "corporatePurpose": "Present Codestra as one professionally managed platform with executive, SRE, security, product and business views.",
+  "businessPortfolio": ["codestra", "moneybee", "beyvra", "breero", "larim-a", "transportation", "booked4seasons", "social", "klyrow", "telnexa", "kyqra", "restaurant", "provisioning"],
+  "standardDimensions": ["codestra_business", "application", "service", "environment", "server", "region", "deployment"],
+  "forbiddenLabels": ["tenant_id", "customer_id", "user_id", "email", "phone", "request_id", "trace_id", "message_id", "financial_transaction_id"],
+  "corporateFeatures": ["codestra_home_dashboard", "executive_scorecards", "business_service_health", "incident_overview", "deployment_correlation", "slo_error_budget_views", "security_audit_views", "communications_health_views"],
+  "dashboardContribution": ["one_platform_landing_page", "business_portfolio_map", "operational_health_center", "incident_triage_center", "provider_health_center"],
+  "beyvraBoundary": "Financial trading dashboards show safe aggregate health, freshness, dependency and reconciliation state only; no trade execution controls or broker secrets.",
+  "activationStatus": "CONFIG_PREPARED_NOT_DEPLOYED"
+}
