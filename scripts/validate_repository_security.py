@@ -207,7 +207,7 @@ def _reject_forbidden_pushes(
                 for word in command
             ):
                 raise ValueError("protected_branch_sync_forbidden")
-            if any(word in {"--all", "--mirror"} for word in command):
+            if any(word in {"--all", "--branches", "--mirror"} for word in command):
                 raise ValueError("protected_branch_sync_forbidden")
             for word in command:
                 refspec = word.lstrip("+")
@@ -248,6 +248,12 @@ def validate_sync(source: str, document: dict) -> None:
     }:
         raise ValueError("sync_permissions_drift")
     sync_job = _job(document, "sync")
+    steps = sync_job.get("steps")
+    if not isinstance(steps, list) or [step.get("name") for step in steps] != [
+        "Checkout Codestra authority",
+        "Import official upstream source snapshot",
+    ]:
+        raise ValueError("sync_privileged_step_set_drift")
     checkout = _step(sync_job, "Checkout Codestra authority")
     if checkout.get("uses") != "actions/checkout@11d5960a326750d5838078e36cf38b85af677262":
         raise ValueError("sync_checkout_action_not_exactly_pinned")

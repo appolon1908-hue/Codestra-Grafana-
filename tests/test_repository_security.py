@@ -90,6 +90,7 @@ class RepositorySecurityTests(unittest.TestCase):
         safe_push = 'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"'
         for unsafe_push in (
             "git push --all origin",
+            "git push --branches origin",
             "git push --mirror origin",
             "git push origin 'refs/heads/*:refs/heads/*'",
         ):
@@ -98,6 +99,16 @@ class RepositorySecurityTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     ValueError, "protected_branch_sync_forbidden"
                 ):
+                    VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
+
+    def test_sync_rejects_any_additional_privileged_step(self) -> None:
+        for step in (
+            "\n      - name: Direct protected push\n        run: git push origin HEAD:main\n",
+            "\n      - name: Unreviewed action\n        uses: actions/github-script@v7\n",
+        ):
+            with self.subTest(step=step):
+                unsafe = self.sync_source + step
+                with self.assertRaisesRegex(ValueError, "sync_privileged_step_set_drift"):
                     VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
 
     def test_required_controls_must_be_in_reachable_shell_context(self) -> None:
