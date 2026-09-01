@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "upstream_clone_url": "https://github.com/grafana/grafana.git",
+  "trusted_upstream_ref": "refs/heads/main",
   "upstream_ref": "5e3a02f81d2aadf4bf24fe49ed97d872556f5bf9",
   "upstream_commit": "5e3a02f81d2aadf4bf24fe49ed97d872556f5bf9",
   "import_path": "upstream",

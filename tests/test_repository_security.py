@@ -41,11 +41,42 @@ class RepositorySecurityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "protected_branch_sync_forbidden"):
             VALIDATOR.validate_sync(unsafe, self.sync_document)
 
+    def test_sync_rejects_full_protected_ref_and_noop_controls(self) -> None:
+        full_ref = self.sync_source.replace(
+            'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"',
+            "git push origin HEAD:refs/heads/main",
+        )
+        with self.assertRaisesRegex(ValueError, "protected_branch_sync_forbidden"):
+            VALIDATOR.validate_sync(full_ref, yaml.safe_load(full_ref))
+        for replacement in (
+            '# git push origin "HEAD:refs/heads/${SYNC_BRANCH}"',
+            'echo \'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"\'',
+        ):
+            with self.subTest(replacement=replacement):
+                no_op = self.sync_source.replace(
+                    'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"', replacement
+                )
+                with self.assertRaisesRegex(ValueError, "executable_security_control_missing"):
+                    VALIDATOR.validate_sync(no_op, yaml.safe_load(no_op))
+
     def test_validation_is_unconditional_and_actions_are_pinned(self) -> None:
         source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
         VALIDATOR.validate_workflow(source)
         with self.assertRaisesRegex(ValueError, "pull_request_validation_must_be_unconditional"):
             VALIDATOR.validate_workflow(source.replace("pull_request:\n", "pull_request:\n    paths:\n      - codestra/**\n"))
+        commented = source.replace(
+            "python scripts/validate_repository_security.py",
+            "# python scripts/validate_repository_security.py",
+        )
+        with self.assertRaisesRegex(ValueError, "executable_security_control_missing"):
+            VALIDATOR.validate_workflow(commented)
+
+    def test_pinned_commit_must_descend_from_trusted_upstream_ref(self) -> None:
+        source = json.loads((ROOT / "CODESTRA_UPSTREAM.json").read_text())
+        lock = json.loads((ROOT / "CODESTRA_UPSTREAM_LOCK.json").read_text())
+        source["trusted_upstream_ref"] = "refs/pull/1/head"
+        with self.assertRaisesRegex(ValueError, "grafana_upstream_drift:trusted_upstream_ref"):
+            VALIDATOR.validate_upstream(source, lock)
 
     def test_generated_sync_pr_is_dispatched_for_exact_branch_validation(self) -> None:
         self.assertEqual(
@@ -62,7 +93,8 @@ class RepositorySecurityTests(unittest.TestCase):
 
     def test_vendored_tree_is_compared_to_fresh_exact_upstream_commit(self) -> None:
         source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
-        self.assertIn('fetch --depth 1 --no-tags origin "$upstream_ref"', source)
+        self.assertIn('fetch --filter=blob:none --no-tags origin "${trusted_upstream_ref}:refs/remotes/origin/codestra-trusted"', source)
+        self.assertIn('merge-base --is-ancestor "$upstream_ref" refs/remotes/origin/codestra-trusted', source)
         self.assertIn('rev-parse HEAD)" == "$upstream_ref"', source)
         self.assertIn("rev-parse 'HEAD^{tree}'", source)
         self.assertIn('git rev-parse "HEAD:${import_path}"', source)
@@ -90,7 +122,6 @@ class RepositorySecurityTests(unittest.TestCase):
             'git diff --check "$base_sha" "$GITHUB_SHA" -- . \':(exclude)upstream\'',
             source,
         )
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

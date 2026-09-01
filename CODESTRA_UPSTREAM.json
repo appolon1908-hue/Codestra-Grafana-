@@ -4,6 +4,7 @@
   "codestra_repository": "appolon1908-hue/Codestra-Grafana-",
   "upstream_repository": "grafana/grafana",
   "upstream_clone_url": "https://github.com/grafana/grafana.git",
+  "trusted_upstream_ref": "refs/heads/main",
   "upstream_ref": "5e3a02f81d2aadf4bf24fe49ed97d872556f5bf9",
   "import_path": "upstream",
   "import_mode": "shallow-source-snapshot",
