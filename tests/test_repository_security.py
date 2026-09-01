@@ -82,6 +82,15 @@ class RepositorySecurityTests(unittest.TestCase):
         for token in required:
             self.assertIn(token, self.sync_source)
 
+    def test_whitespace_gate_checks_the_committed_base_to_head_range(self) -> None:
+        source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
+        self.assertIn("fetch-depth: 0", source)
+        self.assertIn('base_sha="${{ github.event.pull_request.base.sha }}"', source)
+        self.assertIn(
+            'git diff --check "$base_sha" "$GITHUB_SHA" -- . \':(exclude)upstream\'',
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
