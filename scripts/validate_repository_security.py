@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 
 import yaml
@@ -41,6 +42,140 @@ def _active_lines(run: str) -> tuple[str, ...]:
 def _require_active_line(lines: tuple[str, ...], line: str) -> None:
     if line not in lines:
         raise ValueError(f"executable_security_control_missing:{line}")
+
+
+def _shell_records(run: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Return active shell lines with their enclosing executable context."""
+    records: list[tuple[str, tuple[str, ...]]] = []
+    frames: list[dict[str, str]] = []
+    heredoc_end: str | None = None
+
+    def context() -> tuple[str, ...]:
+        rendered = []
+        for frame in frames:
+            if frame["kind"] == "if":
+                rendered.append(
+                    f"if:{frame['condition']}:{frame['branch']}"
+                )
+            else:
+                rendered.append(f"{frame['kind']}:{frame['condition']}")
+        return tuple(rendered)
+
+    for raw_line in run.splitlines():
+        line = raw_line.strip()
+        if heredoc_end is not None:
+            if line == heredoc_end:
+                heredoc_end = None
+            continue
+        if not line or line.startswith("#"):
+            continue
+        if re.match(
+            r"^(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*(?:\{|$)",
+            line,
+        ) or re.match(r"^function\s+[A-Za-z_][A-Za-z0-9_]*(?:\s|$)", line):
+            raise ValueError("shell_function_security_wrapper_forbidden")
+        if re.match(r"^(?:for|while|until|select|case)\b", line):
+            raise ValueError("unsupported_shell_control_flow")
+
+        if line == "fi":
+            if not frames or frames[-1]["kind"] != "if":
+                raise ValueError("shell_control_flow_unbalanced")
+            frames.pop()
+            continue
+        if line.startswith("elif ") and line.endswith("; then"):
+            if not frames or frames[-1]["kind"] != "if":
+                raise ValueError("shell_control_flow_unbalanced")
+            condition = line[len("elif ") : -len("; then")].strip()
+            frames[-1]["branch"] = f"elif:{condition}"
+            continue
+        if line == "else":
+            if not frames or frames[-1]["kind"] != "if":
+                raise ValueError("shell_control_flow_unbalanced")
+            frames[-1]["branch"] = "else"
+            continue
+        if line.startswith("if ") and line.endswith("; then"):
+            records.append((line, context()))
+            frames.append(
+                {
+                    "kind": "if",
+                    "condition": line[len("if ") : -len("; then")].strip(),
+                    "branch": "then",
+                }
+            )
+            continue
+        if line.startswith(("if ", "elif ")):
+            raise ValueError("unsupported_shell_control_flow")
+        if line == "}":
+            if not frames or frames[-1]["kind"] != "group":
+                raise ValueError("shell_control_flow_unbalanced")
+            frames.pop()
+            continue
+
+        records.append((line, context()))
+        if (
+            (line == "{" or line.endswith("&& {") or line.endswith("|| {"))
+            and not line.endswith("; }")
+        ):
+            frames.append({"kind": "group", "condition": line})
+
+        heredoc = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
+        if heredoc:
+            heredoc_end = heredoc.group(2)
+
+    if heredoc_end is not None or frames:
+        raise ValueError("shell_control_flow_unbalanced")
+    return tuple(records)
+
+
+def _require_shell_context(
+    records: tuple[tuple[str, tuple[str, ...]], ...],
+    line: str,
+    expected_context: tuple[str, ...] = (),
+) -> None:
+    contexts = [context for candidate, context in records if candidate == line]
+    if contexts != [expected_context]:
+        raise ValueError(f"executable_security_control_context_invalid:{line}")
+
+
+def _shell_words(line: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        return list(lexer)
+    except ValueError as error:
+        raise ValueError("shell_tokenization_failed") from error
+
+
+def _reject_forbidden_pushes(
+    records: tuple[tuple[str, tuple[str, ...]], ...]
+) -> None:
+    protected = {"main", "staging", "production"}
+    separators = {";", "&&", "||", "|", "&"}
+    for line, _context in records:
+        if "push" not in line:
+            continue
+        words = _shell_words(line)
+        for index in range(len(words) - 1):
+            if words[index : index + 2] != ["git", "push"]:
+                continue
+            command: list[str] = []
+            for word in words[index + 2 :]:
+                if word in separators:
+                    break
+                command.append(word)
+            if any(
+                word in {"--force", "--force-with-lease", "-f"}
+                or word.startswith("--force=")
+                or word.startswith("--force-with-lease=")
+                for word in command
+            ):
+                raise ValueError("protected_branch_sync_forbidden")
+            for word in command:
+                refspec = word.lstrip("+")
+                destination = refspec.rsplit(":", 1)[-1]
+                if destination.removeprefix("refs/heads/") in protected:
+                    raise ValueError("protected_branch_sync_forbidden")
 
 
 def validate_upstream(source: dict, lock: dict) -> None:
@@ -85,19 +220,8 @@ def validate_sync(source: str, document: dict) -> None:
     if not isinstance(run, str):
         raise ValueError("sync_run_script_missing")
     lines = _active_lines(run)
-    active_source = "\n".join(lines)
-    command_boundary = r"(?:^|(?:;|&&|\|\|)\s*)"
-    protected_ref = r"(?:HEAD:)?(?:refs/heads/)?(?:main|staging|production)"
-    if re.search(
-        command_boundary + r"git\s+push\s+origin\s+" + protected_ref + r"(?:\s|$)",
-        active_source,
-        re.MULTILINE,
-    ) or re.search(
-        command_boundary + r"git\s+push\b[^\n]*(?:--force(?:-with-lease)?|-f)(?:\s|$)",
-        active_source,
-        re.MULTILINE,
-    ):
-        raise ValueError("protected_branch_sync_forbidden")
+    records = _shell_records(run)
+    _reject_forbidden_pushes(records)
     required_lines = (
         '[[ "$TRUSTED_UPSTREAM_REF" == "refs/heads/main" ]] || exit 2',
         '[[ "$UPSTREAM_REF" =~ ^[0-9a-f]{40}$ ]] || exit 2',
@@ -120,6 +244,42 @@ def validate_sync(source: str, document: dict) -> None:
     )
     for line in required_lines:
         _require_active_line(lines, line)
+    for line in (
+        '[[ "$TRUSTED_UPSTREAM_REF" == "refs/heads/main" ]] || exit 2',
+        '[[ "$UPSTREAM_REF" =~ ^[0-9a-f]{40}$ ]] || exit 2',
+        'GIT_LFS_SKIP_SMUDGE=1 git -C .codestra-upstream-src fetch --filter=blob:none --no-tags origin "${TRUSTED_UPSTREAM_REF}:refs/remotes/origin/codestra-trusted"',
+        'git -C .codestra-upstream-src merge-base --is-ancestor "$UPSTREAM_REF" refs/remotes/origin/codestra-trusted',
+        '[[ "$UPSTREAM_SHA" == "$UPSTREAM_REF" ]] || exit 2',
+        'SYNC_BRANCH="sync/grafana-upstream-${UPSTREAM_SHA}"',
+        'git fetch --depth 1 --no-tags "$UPSTREAM_URL" "$UPSTREAM_SHA"',
+        "git rm -r --cached --quiet --ignore-unmatch upstream",
+        'git read-tree --prefix=upstream/ "${UPSTREAM_SHA}^{tree}"',
+        'export GIT_AUTHOR_DATE="$UPSTREAM_TIMESTAMP"',
+        'export GIT_COMMITTER_DATE="$UPSTREAM_TIMESTAMP"',
+    ):
+        _require_shell_context(records, line)
+    _require_shell_context(
+        records,
+        'REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/${SYNC_BRANCH}" | awk \'{print $1}\')"',
+    )
+    _require_shell_context(
+        records,
+        '[[ "$REMOTE_SHA" == "$LOCAL_SHA" ]] || {',
+        ('if:[[ -n "$REMOTE_SHA" ]]:then',),
+    )
+    _require_shell_context(
+        records,
+        'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"',
+        ('if:[[ -n "$REMOTE_SHA" ]]:else',),
+    )
+    _require_shell_context(records, "gh pr list --repo \"$GITHUB_REPOSITORY\" --state open \\")
+    _require_shell_context(
+        records,
+        "gh pr create \\",
+        (
+            "if:(( ${#OPEN_PRS[@]} > 1 )):elif:(( ${#OPEN_PRS[@]} == 0 ))",
+        ),
+    )
     for token in (
         "git ls-remote --heads origin",
         '[[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]',
@@ -154,9 +314,13 @@ def validate_workflow(source: str) -> None:
         _step(job, "Compile deterministic generators and validators").get("run", "")
     )
     _require_active_line(compile_lines, "python scripts/validate_repository_security.py")
-    bind_lines = _active_lines(
-        _step(job, "Bind vendored Git tree to the pinned upstream commit").get("run", "")
+    compile_run = _step(job, "Compile deterministic generators and validators").get("run", "")
+    _require_shell_context(
+        _shell_records(compile_run), "python scripts/validate_repository_security.py"
     )
+    bind_run = _step(job, "Bind vendored Git tree to the pinned upstream commit").get("run", "")
+    bind_lines = _active_lines(bind_run)
+    bind_records = _shell_records(bind_run)
     for line in (
         "set -Eeuo pipefail",
         "[[ \"$trusted_upstream_ref\" == 'refs/heads/main' ]]",
@@ -168,11 +332,18 @@ def validate_workflow(source: str) -> None:
         '[[ "$vendored_tree" == "$official_tree" ]] || {',
     ):
         _require_active_line(bind_lines, line)
+        _require_shell_context(bind_records, line)
     reject_lines = _active_lines(
         _step(job, "Reject secret material and whitespace errors").get("run", "")
     )
     _require_active_line(
         reject_lines,
+        'git diff --check "$base_sha" "$GITHUB_SHA" -- . \':(exclude)upstream\'',
+    )
+    _require_shell_context(
+        _shell_records(
+            _step(job, "Reject secret material and whitespace errors").get("run", "")
+        ),
         'git diff --check "$base_sha" "$GITHUB_SHA" -- . \':(exclude)upstream\'',
     )
     uses = [step.get("uses") for step in job.get("steps") or [] if "uses" in step]

@@ -48,6 +48,19 @@ class RepositorySecurityTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "protected_branch_sync_forbidden"):
             VALIDATOR.validate_sync(full_ref, yaml.safe_load(full_ref))
+        for quoted_ref in (
+            'git push origin "HEAD:refs/heads/main"',
+            "git push origin 'HEAD:refs/heads/main'",
+            'git push origin "+HEAD:refs/heads/main"',
+        ):
+            with self.subTest(quoted_ref=quoted_ref):
+                unsafe = self.sync_source.replace(
+                    'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"', quoted_ref
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "protected_branch_sync_forbidden"
+                ):
+                    VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
         for replacement in (
             '# git push origin "HEAD:refs/heads/${SYNC_BRANCH}"',
             'echo \'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"\'',
@@ -58,6 +71,55 @@ class RepositorySecurityTests(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(ValueError, "executable_security_control_missing"):
                     VALIDATOR.validate_sync(no_op, yaml.safe_load(no_op))
+
+    def test_required_controls_must_be_in_reachable_shell_context(self) -> None:
+        merge_base = (
+            'git -C .codestra-upstream-src merge-base --is-ancestor '
+            '"$UPSTREAM_REF" refs/remotes/origin/codestra-trusted'
+        )
+        unreachable = self.sync_source.replace(
+            merge_base,
+            "if false; then\n          " + merge_base + "\n          fi",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "executable_security_control_context_invalid"
+        ):
+            VALIDATOR.validate_sync(unreachable, yaml.safe_load(unreachable))
+
+        safe_push = 'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"'
+        wrapped_push = self.sync_source.replace(
+            safe_push,
+            "if false; then\n            " + safe_push + "\n            fi",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "executable_security_control_context_invalid"
+        ):
+            VALIDATOR.validate_sync(wrapped_push, yaml.safe_load(wrapped_push))
+
+        function_wrapped = self.sync_source.replace(
+            merge_base,
+            "dead_lineage_check() {\n          " + merge_base + "\n          }",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "shell_function_security_wrapper_forbidden"
+        ):
+            VALIDATOR.validate_sync(function_wrapped, yaml.safe_load(function_wrapped))
+
+        validation = (
+            ROOT / ".github/workflows/validate-codestra-observability.yml"
+        ).read_text()
+        validation_merge_base = (
+            'git -C "$staging/source" merge-base --is-ancestor '
+            '"$upstream_ref" refs/remotes/origin/codestra-trusted'
+        )
+        dead_validation = validation.replace(
+            validation_merge_base,
+            "if false; then\n          " + validation_merge_base + "\n          fi",
+        )
+        with self.assertRaisesRegex(
+            ValueError, "executable_security_control_context_invalid"
+        ):
+            VALIDATOR.validate_workflow(dead_validation)
 
     def test_validation_is_unconditional_and_actions_are_pinned(self) -> None:
         source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
