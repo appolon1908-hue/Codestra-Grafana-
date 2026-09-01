@@ -149,14 +149,38 @@ def _shell_words(line: str) -> list[str]:
         raise ValueError("shell_tokenization_failed") from error
 
 
+def _logical_shell_records(
+    records: tuple[tuple[str, tuple[str, ...]], ...]
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Join shell line continuations before security-sensitive tokenization."""
+
+    logical: list[tuple[str, tuple[str, ...]]] = []
+    continuation = ""
+    continuation_context: tuple[str, ...] | None = None
+    for line, context in records:
+        if continuation:
+            if context != continuation_context:
+                raise ValueError("shell_continuation_context_invalid")
+            line = continuation + line
+        trailing_backslashes = len(line) - len(line.rstrip("\\"))
+        if trailing_backslashes % 2 == 1:
+            continuation = line[:-1]
+            continuation_context = context
+            continue
+        logical.append((line, context))
+        continuation = ""
+        continuation_context = None
+    if continuation:
+        raise ValueError("shell_continuation_unbalanced")
+    return tuple(logical)
+
+
 def _reject_forbidden_pushes(
     records: tuple[tuple[str, tuple[str, ...]], ...]
 ) -> None:
     protected = {"main", "staging", "production"}
     separators = {";", "&&", "||", "|", "&"}
-    for line, _context in records:
-        if "push" not in line:
-            continue
+    for line, _context in _logical_shell_records(records):
         words = _shell_words(line)
         for index, word in enumerate(words):
             if word != "git":

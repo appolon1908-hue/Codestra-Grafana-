@@ -101,6 +101,15 @@ class RepositorySecurityTests(unittest.TestCase):
                 ):
                     VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
 
+    def test_sync_rejects_escaped_protected_push_command(self) -> None:
+        safe_push = 'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"'
+        unsafe = self.sync_source.replace(
+            safe_push,
+            safe_push + "\n          git pu\\sh origin HEAD:refs/heads/main",
+        )
+        with self.assertRaisesRegex(ValueError, "protected_branch_sync_forbidden"):
+            VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
+
     def test_sync_rejects_any_additional_privileged_step(self) -> None:
         for step in (
             "\n      - name: Direct protected push\n        run: git push origin HEAD:main\n",
