@@ -72,6 +72,20 @@ class RepositorySecurityTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "executable_security_control_missing"):
                     VALIDATOR.validate_sync(no_op, yaml.safe_load(no_op))
 
+    def test_sync_rejects_protected_push_after_git_global_options(self) -> None:
+        safe_push = 'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"'
+        for unsafe_push in (
+            "git -c color.ui=false push origin HEAD:refs/heads/main",
+            "git -C . push origin HEAD:refs/heads/staging",
+            "git --git-dir=.git push origin +HEAD:refs/heads/production",
+        ):
+            with self.subTest(unsafe_push=unsafe_push):
+                unsafe = self.sync_source.replace(safe_push, unsafe_push)
+                with self.assertRaisesRegex(
+                    ValueError, "protected_branch_sync_forbidden"
+                ):
+                    VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
+
     def test_required_controls_must_be_in_reachable_shell_context(self) -> None:
         merge_base = (
             'git -C .codestra-upstream-src merge-base --is-ancestor '
@@ -121,6 +135,14 @@ class RepositorySecurityTests(unittest.TestCase):
         ):
             VALIDATOR.validate_workflow(dead_validation)
 
+        terminated = self.sync_source.replace(
+            "set -Eeuo pipefail", "set -Eeuo pipefail\n          exit 0", 1
+        )
+        with self.assertRaisesRegex(
+            ValueError, "top_level_shell_termination_forbidden"
+        ):
+            VALIDATOR.validate_sync(terminated, yaml.safe_load(terminated))
+
     def test_validation_is_unconditional_and_actions_are_pinned(self) -> None:
         source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
         VALIDATOR.validate_workflow(source)
@@ -132,6 +154,18 @@ class RepositorySecurityTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "executable_security_control_missing"):
             VALIDATOR.validate_workflow(commented)
+        step_name = "      - name: Bind vendored Git tree to the pinned upstream commit\n"
+        for property_line in (
+            "        continue-on-error: true\n",
+            "        if: false\n",
+        ):
+            with self.subTest(property_line=property_line):
+                weakened = source.replace(step_name, step_name + property_line)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "security_validation_step_must_be_unconditional_and_fatal",
+                ):
+                    VALIDATOR.validate_workflow(weakened)
 
     def test_pinned_commit_must_descend_from_trusted_upstream_ref(self) -> None:
         source = json.loads((ROOT / "CODESTRA_UPSTREAM.json").read_text())

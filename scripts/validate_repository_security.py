@@ -69,6 +69,8 @@ def _shell_records(run: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
             continue
         if not line or line.startswith("#"):
             continue
+        if not frames and re.match(r"^(?:exit|return)(?:\s|$)", line):
+            raise ValueError("top_level_shell_termination_forbidden")
         if re.match(
             r"^(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*(?:\{|$)",
             line,
@@ -156,11 +158,45 @@ def _reject_forbidden_pushes(
         if "push" not in line:
             continue
         words = _shell_words(line)
-        for index in range(len(words) - 1):
-            if words[index : index + 2] != ["git", "push"]:
+        for index, word in enumerate(words):
+            if word != "git":
+                continue
+            command_index = index + 1
+            while command_index < len(words):
+                option = words[command_index]
+                if option in separators:
+                    break
+                if option in {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path"}:
+                    command_index += 2
+                    continue
+                if option.startswith(
+                    (
+                        "--config-env=",
+                        "--git-dir=",
+                        "--work-tree=",
+                        "--namespace=",
+                        "--exec-path=",
+                    )
+                ) or option in {
+                    "--bare",
+                    "--no-replace-objects",
+                    "--literal-pathspecs",
+                    "--glob-pathspecs",
+                    "--noglob-pathspecs",
+                    "--icase-pathspecs",
+                    "--no-optional-locks",
+                    "-p",
+                    "--paginate",
+                    "-P",
+                    "--no-pager",
+                }:
+                    command_index += 1
+                    continue
+                break
+            if command_index >= len(words) or words[command_index] != "push":
                 continue
             command: list[str] = []
-            for word in words[index + 2 :]:
+            for word in words[command_index + 1 :]:
                 if word in separators:
                     break
                 command.append(word)
@@ -310,15 +346,22 @@ def validate_workflow(source: str) -> None:
     setup = _step(job, "Set up Python")
     if setup.get("uses") != "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065":
         raise ValueError("validation_python_action_not_exactly_pinned")
-    compile_lines = _active_lines(
-        _step(job, "Compile deterministic generators and validators").get("run", "")
-    )
+    compile_step = _step(job, "Compile deterministic generators and validators")
+    bind_step = _step(job, "Bind vendored Git tree to the pinned upstream commit")
+    reject_step = _step(job, "Reject secret material and whitespace errors")
+    for security_step in (compile_step, bind_step, reject_step):
+        if "if" in security_step or security_step.get("continue-on-error") not in {
+            None,
+            False,
+        }:
+            raise ValueError("security_validation_step_must_be_unconditional_and_fatal")
+    compile_lines = _active_lines(compile_step.get("run", ""))
     _require_active_line(compile_lines, "python scripts/validate_repository_security.py")
-    compile_run = _step(job, "Compile deterministic generators and validators").get("run", "")
+    compile_run = compile_step.get("run", "")
     _require_shell_context(
         _shell_records(compile_run), "python scripts/validate_repository_security.py"
     )
-    bind_run = _step(job, "Bind vendored Git tree to the pinned upstream commit").get("run", "")
+    bind_run = bind_step.get("run", "")
     bind_lines = _active_lines(bind_run)
     bind_records = _shell_records(bind_run)
     for line in (
@@ -334,7 +377,7 @@ def validate_workflow(source: str) -> None:
         _require_active_line(bind_lines, line)
         _require_shell_context(bind_records, line)
     reject_lines = _active_lines(
-        _step(job, "Reject secret material and whitespace errors").get("run", "")
+        reject_step.get("run", "")
     )
     _require_active_line(
         reject_lines,
@@ -342,7 +385,7 @@ def validate_workflow(source: str) -> None:
     )
     _require_shell_context(
         _shell_records(
-            _step(job, "Reject secret material and whitespace errors").get("run", "")
+            reject_step.get("run", "")
         ),
         'git diff --check "$base_sha" "$GITHUB_SHA" -- . \':(exclude)upstream\'',
     )
