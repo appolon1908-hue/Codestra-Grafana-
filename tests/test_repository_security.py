@@ -47,6 +47,41 @@ class RepositorySecurityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pull_request_validation_must_be_unconditional"):
             VALIDATOR.validate_workflow(source.replace("pull_request:\n", "pull_request:\n    paths:\n      - codestra/**\n"))
 
+    def test_generated_sync_pr_is_dispatched_for_exact_branch_validation(self) -> None:
+        self.assertEqual(
+            self.sync_document["permissions"],
+            {"actions": "write", "contents": "write", "pull-requests": "write"},
+        )
+        self.assertIn("gh workflow run validate-codestra-observability.yml", self.sync_source)
+        self.assertIn('--ref "$SYNC_BRANCH"', self.sync_source)
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
+        )
+        triggers = workflow.get("on") or workflow.get(True) or {}
+        self.assertIn("workflow_dispatch", triggers)
+
+    def test_vendored_tree_is_compared_to_fresh_exact_upstream_commit(self) -> None:
+        source = (ROOT / ".github/workflows/validate-codestra-observability.yml").read_text()
+        self.assertIn('fetch --depth 1 --no-tags origin "$upstream_ref"', source)
+        self.assertIn('rev-parse HEAD)" == "$upstream_ref"', source)
+        self.assertIn("rev-parse 'HEAD^{tree}'", source)
+        self.assertIn('git rev-parse "HEAD:${import_path}"', source)
+        self.assertIn('[[ "$vendored_tree" == "$official_tree" ]]', source)
+        self.assertIn('git fetch --depth 1 --no-tags "$UPSTREAM_URL" "$UPSTREAM_SHA"', self.sync_source)
+        self.assertIn('git read-tree --prefix=upstream/ "${UPSTREAM_SHA}^{tree}"', self.sync_source)
+
+    def test_interrupted_sync_retry_reuses_only_identical_branch_and_pr(self) -> None:
+        required = (
+            'UPSTREAM_TIMESTAMP="$(git -C .codestra-upstream-src show -s --format=%cI "$UPSTREAM_SHA")"',
+            'export GIT_AUTHOR_DATE="$UPSTREAM_TIMESTAMP"',
+            'export GIT_COMMITTER_DATE="$UPSTREAM_TIMESTAMP"',
+            '[[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]',
+            'gh pr list --repo "$GITHUB_REPOSITORY" --state open',
+            "if (( ${#OPEN_PRS[@]} > 1 )); then",
+        )
+        for token in required:
+            self.assertIn(token, self.sync_source)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

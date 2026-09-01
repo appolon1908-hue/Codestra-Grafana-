@@ -34,7 +34,11 @@ def validate_upstream(source: dict, lock: dict) -> None:
 
 def validate_sync(source: str, document: dict) -> None:
     permissions = document.get("permissions") or {}
-    if permissions != {"contents": "write", "pull-requests": "write"}:
+    if permissions != {
+        "actions": "write",
+        "contents": "write",
+        "pull-requests": "write",
+    }:
         raise ValueError("sync_permissions_drift")
     forbidden = (
         r"git\s+push\s+origin\s+HEAD:(?:main|staging|production)(?:\s|$)",
@@ -49,9 +53,19 @@ def validate_sync(source: str, document: dict) -> None:
         'SYNC_BRANCH="sync/grafana-upstream-${UPSTREAM_SHA}"',
         'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"',
         "gh pr create",
+        'git fetch --depth 1 --no-tags "$UPSTREAM_URL" "$UPSTREAM_SHA"',
+        "git rm -r --cached --quiet --ignore-unmatch upstream",
+        'git read-tree --prefix=upstream/ "${UPSTREAM_SHA}^{tree}"',
+        "git ls-remote --heads origin",
+        '[[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]',
+        "gh pr list",
+        "Multiple open synchronization pull requests found.",
+        "gh workflow run validate-codestra-observability.yml",
+        '--repo "$GITHUB_REPOSITORY" --ref "$SYNC_BRANCH"',
         "--base main",
-        "previous_lock.get('upstream_commit') == os.environ['UPSTREAM_SHA']",
-        "synchronized_at = previous_lock.get('synchronized_at', synchronized_at)",
+        "'synchronized_at': os.environ['UPSTREAM_TIMESTAMP']",
+        'export GIT_AUTHOR_DATE="$UPSTREAM_TIMESTAMP"',
+        'export GIT_COMMITTER_DATE="$UPSTREAM_TIMESTAMP"',
     )
     for token in required:
         if token not in source:
@@ -68,6 +82,13 @@ def validate_workflow(source: str) -> None:
         "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
         "persist-credentials: false",
         "python scripts/validate_repository_security.py",
+        "workflow_dispatch:",
+        "Bind vendored Git tree to the pinned upstream commit",
+        'GIT_LFS_SKIP_SMUDGE=1 git -C "$staging/source" fetch --depth 1 --no-tags origin "$upstream_ref"',
+        '[[ "$(git -C "$staging/source" rev-parse HEAD)" == "$upstream_ref" ]]',
+        'official_tree="$(git -C "$staging/source" rev-parse \'HEAD^{tree}\')"',
+        'vendored_tree="$(git rev-parse "HEAD:${import_path}")"',
+        '[[ "$vendored_tree" == "$official_tree" ]]',
     )
     for token in required:
         if token not in source:
