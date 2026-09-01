@@ -207,8 +207,12 @@ def _reject_forbidden_pushes(
                 for word in command
             ):
                 raise ValueError("protected_branch_sync_forbidden")
+            if any(word in {"--all", "--mirror"} for word in command):
+                raise ValueError("protected_branch_sync_forbidden")
             for word in command:
                 refspec = word.lstrip("+")
+                if any(marker in refspec for marker in ("*", "?", "[")):
+                    raise ValueError("protected_branch_sync_forbidden")
                 destination = refspec.rsplit(":", 1)[-1]
                 if destination.removeprefix("refs/heads/") in protected:
                     raise ValueError("protected_branch_sync_forbidden")
@@ -338,6 +342,8 @@ def validate_workflow(source: str) -> None:
     job = _job(document, "validate-source")
     if job.get("name") != "validate-source":
         raise ValueError("validation_job_name_drift")
+    if "if" in job or job.get("continue-on-error") not in {None, False}:
+        raise ValueError("security_validation_job_must_be_unconditional_and_fatal")
     checkout = _step(job, "Check out exact head")
     if checkout.get("uses") != "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" or checkout.get(
         "with"

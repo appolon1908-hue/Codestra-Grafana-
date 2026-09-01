@@ -86,6 +86,20 @@ class RepositorySecurityTests(unittest.TestCase):
                 ):
                     VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
 
+    def test_sync_rejects_bulk_or_wildcard_pushes(self) -> None:
+        safe_push = 'git push origin "HEAD:refs/heads/${SYNC_BRANCH}"'
+        for unsafe_push in (
+            "git push --all origin",
+            "git push --mirror origin",
+            "git push origin 'refs/heads/*:refs/heads/*'",
+        ):
+            with self.subTest(unsafe_push=unsafe_push):
+                unsafe = self.sync_source.replace(safe_push, unsafe_push)
+                with self.assertRaisesRegex(
+                    ValueError, "protected_branch_sync_forbidden"
+                ):
+                    VALIDATOR.validate_sync(unsafe, yaml.safe_load(unsafe))
+
     def test_required_controls_must_be_in_reachable_shell_context(self) -> None:
         merge_base = (
             'git -C .codestra-upstream-src merge-base --is-ancestor '
@@ -164,6 +178,18 @@ class RepositorySecurityTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     ValueError,
                     "security_validation_step_must_be_unconditional_and_fatal",
+                ):
+                    VALIDATOR.validate_workflow(weakened)
+        job_name = "    name: validate-source\n"
+        for property_line in (
+            "    if: false\n",
+            "    continue-on-error: true\n",
+        ):
+            with self.subTest(job_property=property_line):
+                weakened = source.replace(job_name, job_name + property_line)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "security_validation_job_must_be_unconditional_and_fatal",
                 ):
                     VALIDATOR.validate_workflow(weakened)
 
