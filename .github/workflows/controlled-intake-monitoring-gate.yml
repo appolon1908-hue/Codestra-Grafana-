@@ -1,0 +1,95 @@
+name: Controlled intake monitoring integration gate
+on:
+  pull_request:
+    paths: ["integration/controlled-intake-monitoring-v1.json", ".github/workflows/controlled-intake-monitoring-gate.yml"]
+  workflow_dispatch:
+    inputs:
+      execution_reason:
+        description: "Why is this integration being executed?"
+        required: true
+        type: string
+      change_id:
+        description: "Approved change or certification identifier, for example CHG-20260830-OBS-001"
+        required: true
+        type: string
+      target_environment:
+        description: "Source validation target; production is deliberately unavailable"
+        required: true
+        type: choice
+        options: [test, staging]
+      expected_branch_head:
+        description: "Exact 40-character integration branch SHA approved for this execution"
+        required: true
+        type: string
+      confirm_source_only:
+        description: "I confirm this run must not deploy or activate runtime behavior"
+        required: true
+        type: boolean
+      confirm_prometheus_targets_pending:
+        description: "I confirm Prometheus application targets remain pending"
+        required: true
+        type: boolean
+      confirm_blackbox_probes_pending:
+        description: "I confirm Blackbox probes remain pending and side-effect-free"
+        required: true
+        type: boolean
+permissions: {contents: read}
+concurrency:
+  group: controlled-intake-monitoring-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          d=json.loads(Path('integration/controlled-intake-monitoring-v1.json').read_text())
+          assert d['repository']==os.environ['GITHUB_REPOSITORY']
+          assert d['execution_question']=='Why is this integration being executed?'
+          assert d['execution_reason_required'] is True and d['execution_reason_minimum_characters']>=40
+          assert d['allowed_execution_targets']==['test','staging']
+          assert d['source_validation_only'] is True and d['merge_does_not_deploy'] is True
+          assert d['production_execution_authorized'] is False
+          assert d['prometheus_target_state']=='pending' and d['blackbox_probe_state']=='pending'
+          assert d['middleware_metrics_endpoint']['path']=='/metrics'
+          assert d['middleware_metrics_endpoint']['public_exposure'] is False
+          assert d['middleware_metrics_endpoint']['state']=='SOURCE_WIRED_TARGETS_PENDING'
+          assert len(d['coordinated_baselines'])==13
+          assert all(re.fullmatch(r'[0-9a-f]{40}',v) for v in d['coordinated_baselines'].values())
+          assert all(v is False for v in d['runtime_effects'].values())
+          print('CONTROLLED_INTAKE_MONITORING_CONTRACT=PASS')
+          PY
+  require-execution-justification:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXECUTION_REASON: ${{ inputs.execution_reason }}
+      CHANGE_ID: ${{ inputs.change_id }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      EXPECTED_BRANCH_HEAD: ${{ inputs.expected_branch_head }}
+      CONFIRM_SOURCE_ONLY: ${{ inputs.confirm_source_only }}
+      CONFIRM_PROMETHEUS_PENDING: ${{ inputs.confirm_prometheus_targets_pending }}
+      CONFIRM_BLACKBOX_PENDING: ${{ inputs.confirm_blackbox_probes_pending }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: |
+          python3 - <<'PY'
+          import os,re,subprocess
+          reason=' '.join(os.environ['EXECUTION_REASON'].split())
+          if len(reason)<40 or reason.lower() in {'test','testing','n/a','na','because','requested','manual','integration'}: raise SystemExit('meaningful execution_reason of at least 40 characters is required')
+          change=os.environ['CHANGE_ID'].strip().upper()
+          if not re.fullmatch(r'CHG-[A-Z0-9][A-Z0-9._-]{7,}',change): raise SystemExit('invalid CHG-* identifier')
+          if os.environ['TARGET_ENVIRONMENT'] not in {'test','staging'}: raise SystemExit('production is unavailable')
+          if any(os.environ[k].lower()!='true' for k in ('CONFIRM_SOURCE_ONLY','CONFIRM_PROMETHEUS_PENDING','CONFIRM_BLACKBOX_PENDING')): raise SystemExit('all fail-closed confirmations are required')
+          expected=os.environ['EXPECTED_BRANCH_HEAD'].strip().lower(); actual=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          if not re.fullmatch(r'[0-9a-f]{40}',expected) or actual!=expected: raise SystemExit(f'exact-head mismatch: expected {expected}, actual {actual}')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as s:
+              s.write(f'## Controlled intake-monitoring authorization\n- Why executed: {reason}\n- Change ID: {change}\n- Target: {os.environ["TARGET_ENVIRONMENT"]}\n- Exact head: `{actual}`\n- Deployment authorized: **No**\n- Prometheus targets: **pending**\n- Blackbox probes: **pending**\n')
+          print('CONTROLLED_EXECUTION_JUSTIFICATION=PASS')
+          PY
