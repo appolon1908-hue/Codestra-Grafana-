@@ -51,11 +51,12 @@ non-other-writable directory. The deployment preflight recursively enforces
 that protection for the Git metadata, entrypoint, Compose file, dashboards,
 and provisioning source before Docker is invoked; Git worktrees and symlinks
 in that execution closure are rejected. Deployment mode must run as root: the
-preflight reads and validates UID-472-owned mode-`0400`, single-link secret
-files whose complete ancestry is root-owned and non-writable by other
-accounts. That prevents pathname replacement after validation without
-broadening ownership or permissions. Render mode remains available to an
-unprivileged review account and never reads secret content.
+preflight reads and validates root-owned, root-group, mode-`0440`, single-link
+secret files whose complete ancestry is root-owned and non-writable by other
+accounts. Grafana runs as `472:0`, so it can read the group bit through the
+read-only secret mount while UID 472 cannot chmod or replace the validated host
+file. Render mode remains available to an unprivileged review account and never
+reads secret content.
 
 A root operator must prepare the protected source before running any repository
 code:
@@ -92,10 +93,10 @@ The deployment requires the canonical browser root
 Docker-internal service name.
 
 The staging container is bounded to one CPU, 1 GiB of memory/swap, and 256
-processes. Runtime plugin administration and external plugin management are
-disabled in both environment and INI authority; the plugin catalog and public
-key retrieval are disabled so no unreviewed plugin can be downloaded into the
-writable data tmpfs.
+processes. Runtime plugin administration, external plugin management, and the
+default plugin preinstaller are disabled in both environment and INI authority;
+the plugin catalog and public-key retrieval are disabled so no unreviewed plugin
+can be downloaded into the writable data tmpfs.
 
 ## Safety
 

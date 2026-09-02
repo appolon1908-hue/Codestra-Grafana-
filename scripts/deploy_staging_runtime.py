@@ -37,12 +37,12 @@ class PreflightError(RuntimeError):
 
 
 def validate_deployment_identity() -> None:
-    """Require the host authority that can read UID-472-only secret files."""
+    """Require the host authority that can validate root-owned secret files."""
 
     if os.geteuid() != 0:
         raise PreflightError(
-            "staging Grafana deployment must run as root so UID-472-owned "
-            "secret files can be validated without weakening their modes"
+            "staging Grafana deployment must run as root so root-owned "
+            "secret files can be validated without weakening their ownership"
         )
 
 
@@ -229,7 +229,8 @@ def validate_secret_file(
     path: Path,
     label: str,
     *,
-    required_file_uid: int = 472,
+    required_file_uid: int = 0,
+    required_file_gid: int = 0,
     required_ancestry_uid: int = 0,
     ancestry_root: Path = Path("/"),
 ) -> Path:
@@ -253,10 +254,10 @@ def validate_secret_file(
         or info.st_size > 4096
     ):
         raise PreflightError(f"{label} is missing or malformed")
-    if info.st_uid != required_file_uid:
-        raise PreflightError(f"{label} has the wrong owner")
-    if stat.S_IMODE(info.st_mode) != 0o400:
-        raise PreflightError(f"{label} mode must be 0400")
+    if (info.st_uid, info.st_gid) != (required_file_uid, required_file_gid):
+        raise PreflightError(f"{label} has the wrong owner or group")
+    if stat.S_IMODE(info.st_mode) != 0o440:
+        raise PreflightError(f"{label} mode must be 0440")
     descriptor = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(descriptor, "rb") as stream:
         opened = os.fstat(stream.fileno())

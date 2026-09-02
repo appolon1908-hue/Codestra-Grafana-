@@ -31,6 +31,7 @@ services:
       GF_SECURITY_COOKIE_SECURE: "true"
       GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
       GF_PLUGINS_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
     expose:
       - "3000"
     volumes:
@@ -40,10 +41,10 @@ services:
     secrets:
       - source: grafana_admin_password
         target: grafana_admin_password
-        mode: 0400
+        mode: 0440
       - source: grafana_secret_key
         target: grafana_secret_key
-        mode: 0400
+        mode: 0440
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
       - /var/lib/grafana:rw,noexec,nosuid,nodev,size=512m,uid=472,gid=0,mode=0750

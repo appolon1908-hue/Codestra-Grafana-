@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import configparser
+import inspect
 import json
 import os
 import re
@@ -92,12 +93,12 @@ def main() -> None:
         {
             "source": "grafana_admin_password",
             "target": "grafana_admin_password",
-            "mode": 0o400,
+            "mode": 0o440,
         },
         {
             "source": "grafana_secret_key",
             "target": "grafana_secret_key",
-            "mode": 0o400,
+            "mode": 0o440,
         },
     ]
     assert service["environment"]["GF_SECURITY_ADMIN_PASSWORD__FILE"] == (
@@ -117,6 +118,7 @@ def main() -> None:
         service["environment"]["GF_PLUGINS_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED"]
         == "false"
     )
+    assert service["environment"]["GF_PLUGINS_PREINSTALL_DISABLED"] == "true"
     assert service["labels"]["com.codestra.source.sha"] == (
         "${GRAFANA_SOURCE_SHA:?exact merged source SHA is required}"
     )
@@ -157,6 +159,9 @@ def main() -> None:
     ):
         assert required in deployer
     assert "os.environ.copy()" not in deployer
+    secret_parameters = inspect.signature(validate_secret_file).parameters
+    assert secret_parameters["required_file_uid"].default == 0
+    assert secret_parameters["required_file_gid"].default == 0
     validate_secret_content(b"A" * 32, "test secret")
     for malformed in (b"\n" * 32, b"A" * 31, b"A" * 32 + b"\r\n"):
         try:
@@ -171,9 +176,10 @@ def main() -> None:
         secret_directory.mkdir()
         secret = secret_directory / "grafana-secret"
         secret.write_bytes(b"A" * 32)
-        secret.chmod(0o400)
+        secret.chmod(0o440)
         validation_options = {
             "required_file_uid": os.geteuid(),
+            "required_file_gid": os.getegid(),
             "required_ancestry_uid": os.geteuid(),
             "ancestry_root": protected_root,
         }
@@ -185,7 +191,27 @@ def main() -> None:
             pass
         else:
             raise AssertionError("writable secret leaf was accepted")
-        secret.chmod(0o400)
+        secret.chmod(0o440)
+        try:
+            validate_secret_file(
+                secret,
+                "test secret",
+                **{**validation_options, "required_file_uid": os.geteuid() + 1},
+            )
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("unexpected secret owner was accepted")
+        try:
+            validate_secret_file(
+                secret,
+                "test secret",
+                **{**validation_options, "required_file_gid": os.getegid() + 1},
+            )
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("unexpected secret group was accepted")
         secret_directory.chmod(0o777)
         try:
             validate_secret_file(secret, "test secret", **validation_options)
@@ -279,6 +305,7 @@ def main() -> None:
     )
     assert ini.getboolean("plugins", "plugin_admin_enabled") is False
     assert ini.getboolean("plugins", "plugin_admin_external_manage_enabled") is False
+    assert ini.getboolean("plugins", "preinstall_disabled") is True
     assert ini.get("plugins", "plugin_catalog_url") == ""
     assert ini.getboolean("plugins", "public_key_retrieval_disabled") is True
 
