@@ -35,6 +35,29 @@ Grafana is an operational visualization layer. Controlled business mutations mus
 
 After bootstrap use `feature/* -> development -> staging -> main` with documentation/fix branches as needed. Production deployment must consume an accepted immutable source identity; merge alone does not authorize deployment.
 
+The isolated deployment authority for the Middleware safety mission is
+`codestra/deploy/staging/compose.yaml`. It consumes the immutable official
+Grafana image, publishes no host port, joins only `codestra-observability`, and
+provisions one read-only Prometheus datasource plus the minimum staging safety
+dashboard. It is separate from the production PostgreSQL/OIDC candidate.
+
+Rendering or deployment must use `scripts/deploy_staging_runtime.py`.
+Deployment mode rejects a dirty checkout, a non-SHA label, a SHA other than the
+checked-out head, and a head not merged into `origin/main`; it then recreates
+only the Grafana service. Deployment mode must run as root: the preflight reads
+and validates the UID-472-owned `0400`/`0600` secret files without broadening
+their ownership or permissions. Render mode remains available to an unprivileged
+review account and never reads secret content.
+
+This isolated dashboard runtime is intentionally stateless: its SQLite data
+directory is a private tmpfs and all dashboards and datasources are
+source-provisioned. Recreating the service therefore reapplies the protected
+admin credential instead of retaining an obsolete database-backed password.
+Deployment waits up to 120 seconds for the source-defined healthcheck.
+The deployment requires the canonical browser root
+`https://graf.codestra.media/`; redirects and generated links never expose the
+Docker-internal service name.
+
 ## Safety
 
 Never commit datasource credentials, API tokens, passwords, private URLs carrying secrets, certificates, customer message content, recordings or PII.

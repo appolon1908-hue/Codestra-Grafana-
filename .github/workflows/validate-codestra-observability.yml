@@ -6,6 +6,8 @@ on:
       - 'codestra/**'
       - 'scripts/generate_codestra_dashboards.py'
       - 'scripts/validate_codestra_observability.py'
+      - 'scripts/validate_staging_observability.py'
+      - 'scripts/deploy_staging_runtime.py'
       - '.github/workflows/validate-codestra-observability.yml'
   push:
     branches: [development, test, staging, production, main]
@@ -13,6 +15,8 @@ on:
       - 'codestra/**'
       - 'scripts/generate_codestra_dashboards.py'
       - 'scripts/validate_codestra_observability.py'
+      - 'scripts/validate_staging_observability.py'
+      - 'scripts/deploy_staging_runtime.py'
       - '.github/workflows/validate-codestra-observability.yml'
 
 permissions:
@@ -26,9 +30,22 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Check out exact head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove exact source identity
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+          test -z "$(git status --porcelain)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,10 +58,30 @@ jobs:
       - name: Compile deterministic generators and validators
         env:
           PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
-        run: python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py
+        run: python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py scripts/validate_staging_observability.py scripts/deploy_staging_runtime.py
 
       - name: Validate registry, SSO, datasources, RBAC, dashboards, and packaging
-        run: python scripts/validate_codestra_observability.py
+        run: |
+          python scripts/validate_codestra_observability.py
+          python scripts/validate_staging_observability.py
+
+      - name: Render dedicated staging Grafana authority
+        env:
+          GRAFANA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GRAFANA_ROOT_URL: https://graf.codestra.media/
+          GRAFANA_ADMIN_PASSWORD_FILE: /tmp/not-read-during-compose-render-admin
+          GRAFANA_SECRET_KEY_FILE: /tmp/not-read-during-compose-render-key
+        run: |
+          python scripts/deploy_staging_runtime.py \
+            --mode render \
+            --source-sha "$GRAFANA_SOURCE_SHA" \
+            --root-url "$GRAFANA_ROOT_URL" \
+            --admin-password-file "$GRAFANA_ADMIN_PASSWORD_FILE" \
+            --secret-key-file "$GRAFANA_SECRET_KEY_FILE"
+          docker compose -f codestra/deploy/staging/compose.yaml config > /tmp/codestra-grafana-staging.yaml
+          test -s /tmp/codestra-grafana-staging.yaml
+          grep -F 'grafana/grafana:13.2.0@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b' /tmp/codestra-grafana-staging.yaml
+          ! grep -Eq 'privileged: true|seccomp.*unconfined|host_ip:|published:' /tmp/codestra-grafana-staging.yaml
 
       - name: Render hardened Compose candidate
         env:

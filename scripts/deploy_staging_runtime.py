@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Render or deploy only the exact merged staging Grafana authority."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import stat
+import subprocess
+from pathlib import Path
+from urllib.parse import urlsplit
+
+
+REPO = Path(__file__).resolve().parents[1]
+COMPOSE = REPO / "codestra" / "deploy" / "staging" / "compose.yaml"
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
+CANONICAL_ROOT_URL = "https://graf.codestra.media/"
+CANONICAL_REPOSITORY = "https://github.com/appolon1908-hue/Codestra-Grafana-.git"
+CANONICAL_MAIN_REF = "refs/remotes/codestra-canonical/main"
+
+
+class PreflightError(RuntimeError):
+    pass
+
+
+def validate_deployment_identity() -> None:
+    """Require the host authority that can read UID-472-only secret files."""
+
+    if os.geteuid() != 0:
+        raise PreflightError(
+            "staging Grafana deployment must run as root so UID-472-owned "
+            "secret files can be validated without weakening their modes"
+        )
+
+
+def git_output(*args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        raise PreflightError("Git source identity could not be verified")
+    return result.stdout.strip()
+
+
+def validate_source(source_sha: str, *, require_merged: bool) -> None:
+    if not SHA40.fullmatch(source_sha):
+        raise PreflightError("source SHA must be exactly 40 lowercase hexadecimal characters")
+    if git_output("rev-parse", "HEAD") != source_sha:
+        raise PreflightError("source SHA does not match the checked-out exact head")
+    if git_output("status", "--porcelain"):
+        raise PreflightError("deployment checkout is not clean")
+    if require_merged:
+        refreshed = subprocess.run(
+            [
+                "git",
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                CANONICAL_REPOSITORY,
+                f"+refs/heads/main:{CANONICAL_MAIN_REF}",
+            ],
+            cwd=REPO,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+        if refreshed.returncode != 0:
+            raise PreflightError("canonical main branch could not be refreshed")
+        merged = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", source_sha, CANONICAL_MAIN_REF],
+            cwd=REPO,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
+        if merged.returncode != 0:
+            raise PreflightError("source SHA is not merged into canonical main")
+
+
+def validate_root_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if (
+        value != CANONICAL_ROOT_URL
+        or parsed.scheme != "https"
+        or parsed.hostname != "graf.codestra.media"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise PreflightError(
+            f"Grafana root URL must be exactly {CANONICAL_ROOT_URL}"
+        )
+    return value
+
+
+def validate_secret_file(path: Path, label: str) -> Path:
+    if not path.is_absolute() or path.is_symlink():
+        raise PreflightError(f"{label} must be an absolute non-symlink file")
+    resolved = path.resolve(strict=True)
+    info = resolved.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_size < 32 or info.st_size > 4096:
+        raise PreflightError(f"{label} is missing or malformed")
+    if info.st_uid != 472:
+        raise PreflightError(f"{label} must be owned by Grafana uid 472")
+    if stat.S_IMODE(info.st_mode) not in {0o400, 0o600}:
+        raise PreflightError(f"{label} mode must be 0400 or 0600")
+    validate_secret_content(resolved.read_bytes(), label)
+    return resolved
+
+
+def validate_secret_content(raw: bytes, label: str) -> None:
+    # Grafana's container entrypoint loads __FILE values with shell command
+    # substitution, which removes trailing LF bytes. Validate that exact value.
+    effective = raw.rstrip(b"\n")
+    if not 32 <= len(effective) <= 4096:
+        raise PreflightError(f"{label} effective value is missing or malformed")
+    if any(byte < 0x21 or byte > 0x7E for byte in effective):
+        raise PreflightError(f"{label} effective value must be visible ASCII")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("render", "deploy"), required=True)
+    parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--root-url", required=True)
+    parser.add_argument("--admin-password-file", type=Path, required=True)
+    parser.add_argument("--secret-key-file", type=Path, required=True)
+    args = parser.parse_args()
+
+    if args.mode == "deploy":
+        validate_deployment_identity()
+    validate_source(args.source_sha, require_merged=args.mode == "deploy")
+    root_url = validate_root_url(args.root_url)
+    admin_file = (
+        validate_secret_file(args.admin_password_file, "Grafana admin password")
+        if args.mode == "deploy"
+        else args.admin_password_file
+    )
+    key_file = (
+        validate_secret_file(args.secret_key_file, "Grafana state secret")
+        if args.mode == "deploy"
+        else args.secret_key_file
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GRAFANA_SOURCE_SHA": args.source_sha,
+            "GRAFANA_ROOT_URL": root_url,
+            "GRAFANA_ADMIN_PASSWORD_FILE": str(admin_file),
+            "GRAFANA_SECRET_KEY_FILE": str(key_file),
+        }
+    )
+    command = ["docker", "compose", "-f", str(COMPOSE)]
+    if args.mode == "render":
+        command.extend(("config", "--quiet"))
+    else:
+        command.extend(
+            (
+                "up",
+                "-d",
+                "--no-deps",
+                "--force-recreate",
+                "--wait",
+                "--wait-timeout",
+                "120",
+                "grafana",
+            )
+        )
+    result = subprocess.run(
+        command,
+        cwd=REPO,
+        env=environment,
+        check=False,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        raise PreflightError(f"staging Grafana {args.mode} failed")
+    print(f"GRAFANA_STAGING_{args.mode.upper()}=PASS")
+    print(f"GRAFANA_SOURCE_SHA={args.source_sha}")
+    print("SECCOMP_DISABLED=NO")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, subprocess.TimeoutExpired, PreflightError) as exc:
+        print(f"GRAFANA_STAGING_PREFLIGHT=FAIL: {exc}")
+        raise SystemExit(1)

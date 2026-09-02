@@ -1,0 +1,17 @@
+apiVersion: 1
+
+prune: true
+
+datasources:
+  - name: Codestra Prometheus
+    uid: codestra-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-staging:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      queryTimeout: 60s
+      manageAlerts: false
