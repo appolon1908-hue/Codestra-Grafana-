@@ -129,6 +129,29 @@ def validate_postgres_exporter_authority() -> None:
             )
 
 
+def registry_repositories(registry_text: str) -> set[str]:
+    try:
+        registry = json.loads(registry_text)
+    except json.JSONDecodeError:
+        fail("business registry is not valid JSON")
+
+    repositories: set[str] = set()
+
+    def collect(value: Any) -> None:
+        if isinstance(value, dict):
+            repository = value.get("repo")
+            if isinstance(repository, str):
+                repositories.add(repository)
+            for child in value.values():
+                collect(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(registry)
+    return repositories
+
+
 def validate_repository_alias_document(document: Any, registry_text: str) -> None:
     if document.get("schema_version") != "1.0":
         fail("repository alias schema_version must be 1.0")
@@ -138,6 +161,7 @@ def validate_repository_alias_document(document: Any, registry_text: str) -> Non
     mappings = document.get("mappings", [])
     if not mappings:
         fail("repository alias mappings are empty")
+    registered_repositories = registry_repositories(registry_text)
 
     repository_ids: set[int] = set()
     current_names: set[str] = set()
@@ -160,9 +184,9 @@ def validate_repository_alias_document(document: Any, registry_text: str) -> Non
             fail("repository alias leaves the approved owner")
         if state != "PREPARED_NOT_RENAMED":
             fail(f"repository alias changed state without cutover: {current}")
-        if current not in registry_text:
+        if current not in registered_repositories:
             fail(f"business registry lost the current operational repository: {current}")
-        if target in registry_text:
+        if target in registered_repositories:
             fail(f"business registry uses a target repository before cutover: {target}")
 
         repository_ids.add(repository_id)

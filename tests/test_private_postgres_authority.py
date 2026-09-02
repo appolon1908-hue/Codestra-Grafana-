@@ -72,6 +72,21 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_repository_alias_document(changed, changed_registry)
 
+    def test_registry_repository_comparison_is_exact(self) -> None:
+        registry = json.loads(self.registry_text)
+        restaurant = next(
+            item
+            for business in registry["businesses"]
+            for item in business["repositories"]
+            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
+        )
+        restaurant["repo"] = "appolon1908-hue/Frontend-Resturant--renamed"
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(
+                self.document,
+                json.dumps(registry),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
