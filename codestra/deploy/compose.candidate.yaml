@@ -2,12 +2,6 @@ name: codestra-grafana
 
 services:
   grafana:
-    build:
-      context: ../..
-      dockerfile: codestra/deploy/Dockerfile
-      args:
-        PYTHON_BUILDER_IMAGE: ${PYTHON_BUILDER_IMAGE:?set an immutable Python image including sha256 digest}
-        GRAFANA_IMAGE: ${GRAFANA_BASE_IMAGE:?set an immutable official Grafana image including sha256 digest}
     image: ${CODESTRA_GRAFANA_IMAGE:?set the immutable Codestra Grafana image reference including sha256 digest}
     restart: unless-stopped
     init: true
@@ -22,6 +16,8 @@ services:
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning
       GF_DATABASE_HOST: ${GF_DATABASE_HOST:?required private PostgreSQL host and port}
       GF_DATABASE_NAME: ${GF_DATABASE_NAME:-grafana}
+      CODESTRA_SOURCE_SHA: ${CODESTRA_SOURCE_SHA:?exact protected source SHA is required}
+      CODESTRA_IMAGE_DIGEST: ${CODESTRA_IMAGE_DIGEST:?exact sha256 image digest is required}
     secrets:
       - grafana_oidc_client_secret
       - grafana_database_user
@@ -90,17 +86,12 @@ volumes:
 
 secrets:
   grafana_oidc_client_secret:
-    external: true
-    name: ${GRAFANA_OIDC_SECRET_NAME:-grafana-oidc-client-secret}
+    file: ${GRAFANA_OIDC_CLIENT_SECRET_FILE:?mounted OIDC client-secret file is required}
   grafana_database_user:
-    external: true
-    name: ${GRAFANA_DATABASE_USER_SECRET_NAME:-grafana-database-user}
+    file: ${GRAFANA_DATABASE_USER_FILE:?mounted database-user file is required}
   grafana_database_password:
-    external: true
-    name: ${GRAFANA_DATABASE_PASSWORD_SECRET_NAME:-grafana-database-password}
+    file: ${GRAFANA_DATABASE_PASSWORD_FILE:?mounted database-password file is required}
   grafana_database_ca:
-    external: true
-    name: ${GRAFANA_DATABASE_CA_SECRET_NAME:-grafana-database-ca}
+    file: ${GRAFANA_DATABASE_CA_FILE:?mounted database-CA file is required}
   grafana_secret_key:
-    external: true
-    name: ${GRAFANA_SECRET_KEY_NAME:-grafana-secret-key}
+    file: ${GRAFANA_SECRET_KEY_FILE:?mounted Grafana secret-key file is required}

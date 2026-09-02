@@ -1,0 +1,14 @@
+name: Release signed Grafana image
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag: {description: "Immutable label codestra-grafana-vX.Y.Z", required: true, type: string}
+      protected_source_sha: {description: "Exact protected production commit", required: true, type: string}
+permissions: {contents: read, packages: write, id-token: write, attestations: write}
+jobs:
+  release:
+    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-release-image.yml@9a6aebb849bbc068105c10d9d1dfd39ebf6f78bd
+    with:
+      image_id: grafana
+      release_tag: ${{ inputs.release_tag }}
+      protected_source_sha: ${{ inputs.protected_source_sha }}

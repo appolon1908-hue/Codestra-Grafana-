@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "imageId": "grafana",
+  "dockerfile": "codestra/deploy/Dockerfile",
+  "context": ".",
+  "buildArgs": {
+    "GRAFANA_IMAGE": "docker.io/grafana/grafana@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283",
+    "PYTHON_BUILDER_IMAGE": "docker.io/library/python@sha256:adafcc17694d715c905b4c7bebd96907a1fd5cf183395f0ebc4d3428bd22d92d"
+  },
+  "license": "AGPL-3.0-only",
+  "description": "Signed Codestra Grafana image with immutable OIDC, datasource, dashboard, and read-only observability configuration.",
+  "productionActivation": false
+}

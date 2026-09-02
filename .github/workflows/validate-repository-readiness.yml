@@ -1,0 +1,58 @@
+name: Validate Grafana repository readiness
+on: [pull_request]
+permissions: {contents: read}
+jobs:
+  validate-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CODESTRA_GRAFANA_IMAGE: ghcr.io/appolon1908-hue/codestra-grafana--grafana@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      CODESTRA_SOURCE_SHA: "0000000000000000000000000000000000000000"
+      CODESTRA_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {ref: "${{ github.event.pull_request.head.sha }}", fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: "3.13"}
+      - env: {HEAD_SHA: "${{ github.event.pull_request.head.sha }}", BASE_SHA: "${{ github.event.pull_request.base.sha }}"}
+        run: |
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          python3 -m pip install --disable-pip-version-check --no-cache-dir -r requirements-validation.txt
+          python3 scripts/validate_codestra_observability.py
+          python3 scripts/validate_repository_readiness.py
+          python3 scripts/validate_runtime_identity.py
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+      - name: Scan changed and governed source with redacted output
+        env: {HEAD_SHA: "${{ github.event.pull_request.head.sha }}", BASE_SHA: "${{ github.event.pull_request.base.sha }}"}
+        run: |
+          archive="${RUNNER_TEMP}/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz --output "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact=100 --exit-code 1 --log-opts="${BASE_SHA}..${HEAD_SHA}" .
+          "$RUNNER_TEMP/gitleaks" dir --no-banner --redact=100 --exit-code 1 .
+      - name: Build and inspect exact locked Grafana image
+        env: {HEAD_SHA: "${{ github.event.pull_request.head.sha }}"}
+        run: bash scripts/build_and_inspect_locked_image.sh "$HEAD_SHA"
+  validate-merge-result:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CODESTRA_GRAFANA_IMAGE: ghcr.io/appolon1908-hue/codestra-grafana--grafana@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      CODESTRA_SOURCE_SHA: "0000000000000000000000000000000000000000"
+      CODESTRA_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: "3.13"}
+      - run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m pip install --disable-pip-version-check --no-cache-dir -r requirements-validation.txt
+          python3 scripts/validate_codestra_observability.py
+          python3 scripts/validate_repository_readiness.py
+          python3 scripts/validate_runtime_identity.py
+          python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build and inspect synthetic merge result
+        run: bash scripts/build_and_inspect_locked_image.sh "$GITHUB_SHA"
