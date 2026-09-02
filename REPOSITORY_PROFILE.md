@@ -42,7 +42,8 @@ Provides operational dashboards and exploration for metrics, logs, and traces ac
 
 ## Governance and safety
 
-- Promotion model: `feature/docs/fix/security/upgrade -> development -> test -> staging -> production -> main`.
+- Temporary branches use one explicit prefix: `feature/*`, `docs/*`, `fix/*`, `security/*`, or `upgrade/*`.
+- Promotion path: `development -> test -> staging -> production -> main`.
 - Native port `3000` must remain private; public access is only through `graf.codestra.media` and approved authentication.
 - Never commit datasource credentials, OIDC secrets, API keys, customer data, or rendered secret values.
 - Merge does not deploy Grafana, install secrets, create Keycloak clients, reload Caddy, or expose a port.
