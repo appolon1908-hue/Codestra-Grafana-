@@ -1,0 +1,106 @@
+name: codestra-grafana
+
+services:
+  grafana:
+    build:
+      context: ../..
+      dockerfile: codestra/deploy/Dockerfile
+      args:
+        PYTHON_BUILDER_IMAGE: ${PYTHON_BUILDER_IMAGE_NAME:?set the pinned Python builder image name and tag}@sha256:${PYTHON_BUILDER_IMAGE_DIGEST:?set the 64-character Python builder sha256 digest}
+        GRAFANA_IMAGE: ${GRAFANA_BASE_IMAGE_NAME:?set the pinned official Grafana image name and tag}@sha256:${GRAFANA_BASE_IMAGE_DIGEST:?set the 64-character official Grafana sha256 digest}
+    image: ${CODESTRA_GRAFANA_IMAGE_NAME:?set the immutable Codestra Grafana image name and tag}@sha256:${CODESTRA_GRAFANA_IMAGE_DIGEST:?set the 64-character Codestra Grafana sha256 digest}
+    restart: unless-stopped
+    init: true
+    user: "472:0"
+    read_only: true
+    stop_grace_period: 60s
+    environment:
+      GF_PATHS_CONFIG: /etc/grafana/grafana.ini
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_PATHS_LOGS: /var/log/grafana
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_DATABASE_HOST: ${GF_DATABASE_HOST:?required private PostgreSQL host and port}
+      GF_DATABASE_NAME: ${GF_DATABASE_NAME:-grafana}
+    secrets:
+      - grafana_oidc_client_secret
+      - grafana_database_user
+      - grafana_database_password
+      - grafana_database_ca
+      - grafana_secret_key
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    expose:
+      - "3000"
+    networks:
+      - codestra-observability
+      - codestra-database
+    volumes:
+      - grafana-data:/var/lib/grafana
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /var/log/grafana:size=128m,uid=472,gid=0,mode=0750
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q '\"database\":\"ok\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: "3"
+    labels:
+      codestra.business: platform
+      codestra.application: observability
+      codestra.service: grafana
+      codestra.environment: ${CODESTRA_ENVIRONMENT:?required}
+      codestra.region: ${CODESTRA_REGION:?required}
+      codestra.deployment: ${CODESTRA_DEPLOYMENT_ID:?required}
+      codestra.telemetry.collect: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+          pids: 512
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+networks:
+  codestra-observability:
+    external: true
+    name: ${CODESTRA_OBSERVABILITY_NETWORK:-codestra-observability}
+  codestra-database:
+    external: true
+    name: ${CODESTRA_DATABASE_NETWORK:-codestra-database}
+
+volumes:
+  grafana-data:
+
+secrets:
+  grafana_oidc_client_secret:
+    external: true
+    name: ${GRAFANA_OIDC_SECRET_NAME:-grafana-oidc-client-secret}
+  grafana_database_user:
+    external: true
+    name: ${GRAFANA_DATABASE_USER_SECRET_NAME:-grafana-database-user}
+  grafana_database_password:
+    external: true
+    name: ${GRAFANA_DATABASE_PASSWORD_SECRET_NAME:-grafana-database-password}
+  grafana_database_ca:
+    external: true
+    name: ${GRAFANA_DATABASE_CA_SECRET_NAME:-grafana-database-ca}
+  grafana_secret_key:
+    external: true
+    name: ${GRAFANA_SECRET_KEY_NAME:-grafana-secret-key}

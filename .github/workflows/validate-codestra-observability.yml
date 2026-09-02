@@ -1,0 +1,111 @@
+name: Validate Codestra Grafana corporate control plane
+
+on:
+  pull_request:
+    paths:
+      - 'codestra/**'
+      - 'scripts/generate_codestra_dashboards.py'
+      - 'scripts/harden_codestra_dashboards.py'
+      - 'scripts/validate_codestra_observability.py'
+      - 'scripts/validate_codestra_production_review.py'
+      - '.github/workflows/validate-codestra-observability.yml'
+  push:
+    branches: [development, test, staging, production, main]
+    paths:
+      - 'codestra/**'
+      - 'scripts/generate_codestra_dashboards.py'
+      - 'scripts/harden_codestra_dashboards.py'
+      - 'scripts/validate_codestra_observability.py'
+      - 'scripts/validate_codestra_production_review.py'
+      - '.github/workflows/validate-codestra-observability.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codestra-grafana-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pinned validator dependency
+        run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.3
+
+      - name: Compile deterministic generators and validators
+        env:
+          PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
+        run: |
+          python -m py_compile \
+            scripts/generate_codestra_dashboards.py \
+            scripts/harden_codestra_dashboards.py \
+            scripts/validate_codestra_observability.py \
+            scripts/validate_codestra_production_review.py
+
+      - name: Validate final image, provisioning, dashboards, and corporate controls
+        env:
+          PYTHON_BUILDER_IMAGE_NAME: python:3.13-alpine
+          PYTHON_BUILDER_IMAGE_DIGEST: '0000000000000000000000000000000000000000000000000000000000000000'
+          GRAFANA_BASE_IMAGE_NAME: grafana/grafana:99.0.0
+          GRAFANA_BASE_IMAGE_DIGEST: '1111111111111111111111111111111111111111111111111111111111111111'
+          CODESTRA_GRAFANA_IMAGE_NAME: ghcr.io/appolon1908-hue/codestra-grafana:ci
+          CODESTRA_GRAFANA_IMAGE_DIGEST: '2222222222222222222222222222222222222222222222222222222222222222'
+        run: python scripts/validate_codestra_production_review.py
+
+      - name: Render hardened Compose candidate
+        env:
+          PYTHON_BUILDER_IMAGE_NAME: python:3.13-alpine
+          PYTHON_BUILDER_IMAGE_DIGEST: '0000000000000000000000000000000000000000000000000000000000000000'
+          GRAFANA_BASE_IMAGE_NAME: grafana/grafana:99.0.0
+          GRAFANA_BASE_IMAGE_DIGEST: '1111111111111111111111111111111111111111111111111111111111111111'
+          CODESTRA_GRAFANA_IMAGE_NAME: ghcr.io/appolon1908-hue/codestra-grafana:ci
+          CODESTRA_GRAFANA_IMAGE_DIGEST: '2222222222222222222222222222222222222222222222222222222222222222'
+          CODESTRA_ENVIRONMENT: test
+          CODESTRA_REGION: ci
+          CODESTRA_DEPLOYMENT_ID: exact-head-ci
+          GF_DATABASE_HOST: postgres-grafana:5432
+          GF_DATABASE_NAME: grafana
+          GRAFANA_HOST_PORT: '3000'
+        run: |
+          docker compose -f codestra/deploy/compose.candidate.yaml config > /tmp/codestra-grafana-compose.yaml
+          test -s /tmp/codestra-grafana-compose.yaml
+          grep -Eq 'host_ip:[[:space:]]*127\.0\.0\.1' /tmp/codestra-grafana-compose.yaml
+          ! grep -Eq 'host_ip:[[:space:]]*(0\.0\.0\.0|::)|:latest([[:space:]]|$)|privileged: true|/var/run/docker\.sock' /tmp/codestra-grafana-compose.yaml
+          python - <<'PY'
+          import re
+          import yaml
+
+          document = yaml.safe_load(open('/tmp/codestra-grafana-compose.yaml', encoding='utf-8'))
+          service = document['services']['grafana']
+          references = {
+              'final': service['image'],
+              'builder': service['build']['args']['PYTHON_BUILDER_IMAGE'],
+              'upstream': service['build']['args']['GRAFANA_IMAGE'],
+          }
+          pattern = re.compile(r'^[^@\s]+@sha256:[0-9a-f]{64}$')
+          invalid = {name: value for name, value in references.items() if not pattern.fullmatch(value)}
+          assert not invalid, f'mutable or malformed image references: {invalid}'
+          PY
+
+      - name: Confirm source-only safety state
+        run: |
+          test "$(python -c 'import json; print(json.load(open("codestra/runtime.v1.json"))["status"])')" = "CONFIG_PREPARED_NOT_DEPLOYED"
+          test "$(python -c 'import json; print(json.load(open("codestra/rbac-policy.json"))["status"])')" = "POLICY_PREPARED_NOT_APPLIED"
+          python - <<'PY'
+          import json
+          runtime = json.load(open('codestra/runtime.v1.json', encoding='utf-8'))
+          assert runtime['activation']
+          assert all(value is False for value in runtime['activation'].values())
+          PY
