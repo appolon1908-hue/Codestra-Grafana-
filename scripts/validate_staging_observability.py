@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ import yaml
 from deploy_staging_runtime import (
     PreflightError,
     validate_deployment_identity,
+    validate_protected_checkout,
     validate_secret_content,
 )
 
@@ -125,6 +127,7 @@ def main() -> None:
         'CANONICAL_MAIN_REF = "refs/remotes/codestra-canonical/main"',
         'f"+refs/heads/main:{CANONICAL_MAIN_REF}"',
         '"merge-base",',
+        "validate_protected_checkout()",
         '"--force-recreate"',
         '"--wait-timeout"',
         '"grafana"',
@@ -147,6 +150,30 @@ def main() -> None:
             raise AssertionError("non-root deployment authority was accepted")
     with patch("deploy_staging_runtime.os.geteuid", return_value=0):
         validate_deployment_identity()
+    with tempfile.TemporaryDirectory(dir="/root") as temporary:
+        protected = Path(temporary) / "authority"
+        (protected / ".git").mkdir(parents=True)
+        (protected / "scripts").mkdir()
+        (protected / "scripts" / "deploy_staging_runtime.py").write_text("# test\n")
+        runtime = protected / "codestra" / "deploy" / "staging"
+        runtime.mkdir(parents=True)
+        (runtime / "compose.yaml").write_text("services: {}\n")
+        validate_protected_checkout(protected)
+        (runtime / "compose.yaml").chmod(0o666)
+        try:
+            validate_protected_checkout(protected)
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("writable deployment source was accepted")
+        (runtime / "compose.yaml").chmod(0o644)
+        (runtime / "escape").symlink_to("/tmp")
+        try:
+            validate_protected_checkout(protected)
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("symlinked deployment source was accepted")
     assert "root_url = https://graf.codestra.media/" in (
         STAGING / "grafana.ini"
     ).read_text(encoding="utf-8")

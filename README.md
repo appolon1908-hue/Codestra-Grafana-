@@ -44,10 +44,31 @@ dashboard. It is separate from the production PostgreSQL/OIDC candidate.
 Rendering or deployment must use `scripts/deploy_staging_runtime.py`.
 Deployment mode rejects a dirty checkout, a non-SHA label, a SHA other than the
 checked-out head, and a head not merged into `origin/main`; it then recreates
-only the Grafana service. Deployment mode must run as root: the preflight reads
-and validates the UID-472-owned `0400`/`0600` secret files without broadening
-their ownership or permissions. Render mode remains available to an unprivileged
-review account and never reads secret content.
+only the Grafana service. Never invoke that Python file as root from a
+user-owned or user-writable checkout. First fetch the accepted exact main SHA
+into a standalone checkout below a root-owned, non-group-writable,
+non-other-writable directory. The deployment preflight recursively enforces
+that protection for the Git metadata, entrypoint, Compose file, dashboards,
+and provisioning source before Docker is invoked; Git worktrees and symlinks
+in that execution closure are rejected. Deployment mode must run as root: the
+preflight reads and validates the UID-472-owned `0400`/`0600` secret files
+without broadening their ownership or permissions. Render mode remains
+available to an unprivileged review account and never reads secret content.
+
+A root operator must prepare the protected source before running any repository
+code:
+
+```bash
+install -d -o root -g root -m 0755 /opt/codestra-observability
+install -d -o root -g root -m 0700 /opt/codestra-observability/grafana-authority
+git -C /opt/codestra-observability/grafana-authority init
+git -C /opt/codestra-observability/grafana-authority remote add origin https://github.com/appolon1908-hue/Codestra-Grafana-.git
+git -C /opt/codestra-observability/grafana-authority fetch --no-tags origin refs/heads/main
+git -C /opt/codestra-observability/grafana-authority checkout --detach <accepted-main-sha>
+chown -R root:root /opt/codestra-observability/grafana-authority
+chmod -R go-w /opt/codestra-observability/grafana-authority
+python3 /opt/codestra-observability/grafana-authority/scripts/deploy_staging_runtime.py ...
+```
 
 This isolated dashboard runtime is intentionally stateless: its SQLite data
 directory is a private tmpfs and all dashboards and datasources are

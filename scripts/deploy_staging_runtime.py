@@ -34,6 +34,56 @@ def validate_deployment_identity() -> None:
         )
 
 
+def _validate_protected_path(path: Path, label: str) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise PreflightError(f"{label} could not be inspected") from exc
+    if stat.S_ISLNK(info.st_mode):
+        raise PreflightError(f"{label} must not be a symbolic link")
+    if info.st_uid != 0:
+        raise PreflightError(f"{label} must be owned by root")
+    if stat.S_IMODE(info.st_mode) & 0o022:
+        raise PreflightError(f"{label} must not be group- or other-writable")
+
+
+def _validate_protected_tree(path: Path, label: str) -> None:
+    _validate_protected_path(path, label)
+    for directory, names, files in os.walk(path, followlinks=False):
+        directory_path = Path(directory)
+        _validate_protected_path(directory_path, label)
+        for name in (*names, *files):
+            _validate_protected_path(directory_path / name, label)
+
+
+def validate_protected_checkout(repo: Path = REPO) -> None:
+    """Reject deployment from source another host account can replace."""
+
+    if not repo.is_absolute() or repo.is_symlink():
+        raise PreflightError("deployment checkout must be an absolute non-symlink path")
+    current = repo
+    while True:
+        _validate_protected_path(current, "deployment checkout ancestry")
+        if current == current.parent:
+            break
+        current = current.parent
+
+    git_directory = repo / ".git"
+    if not git_directory.is_dir() or git_directory.is_symlink():
+        raise PreflightError(
+            "deployment checkout must be a standalone protected Git checkout"
+        )
+    _validate_protected_tree(git_directory, "deployment Git metadata")
+    _validate_protected_path(
+        repo / "scripts" / "deploy_staging_runtime.py",
+        "deployment entrypoint",
+    )
+    _validate_protected_tree(
+        repo / "codestra" / "deploy" / "staging",
+        "deployment runtime source",
+    )
+
+
 def git_output(*args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -138,6 +188,7 @@ def main() -> int:
 
     if args.mode == "deploy":
         validate_deployment_identity()
+        validate_protected_checkout()
     validate_source(args.source_sha, require_merged=args.mode == "deploy")
     root_url = validate_root_url(args.root_url)
     admin_file = (
