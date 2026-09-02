@@ -34,9 +34,7 @@ class PrivatePostgresAuthorityTests(unittest.TestCase):
 
     def test_forbidden_hostname_comparison_is_case_insensitive(self) -> None:
         retired = "PGEX" + ".CODESTRA.MEDIA"
-        self.assertTrue(
-            AUTHORITY.contains_forbidden_postgres_hostname(retired)
-        )
+        self.assertTrue(AUTHORITY.contains_forbidden_postgres_hostname(retired))
 
     def test_generated_bytecode_is_excluded_from_source_scan(self) -> None:
         self.assertTrue(
@@ -81,6 +79,24 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
             if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
         )
         restaurant["repo"] = "appolon1908-hue/Frontend-Resturant--renamed"
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(
+                self.document,
+                json.dumps(registry),
+            )
+
+    def test_non_operational_metadata_cannot_mask_removed_repository(self) -> None:
+        registry = json.loads(self.registry_text)
+        restaurant = next(
+            item
+            for business in registry["businesses"]
+            for item in business["repositories"]
+            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
+        )
+        restaurant["repo"] = "appolon1908-hue/unapproved-restaurant-frontend"
+        registry.setdefault("platform_services", []).append(
+            {"repo": "appolon1908-hue/Frontend-Resturant-"}
+        )
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_repository_alias_document(
                 self.document,
