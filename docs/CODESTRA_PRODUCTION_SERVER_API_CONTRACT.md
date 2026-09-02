@@ -16,7 +16,7 @@ Grafana is the corporate operational interface. It does not own metrics retentio
 |---|---|---|---|
 | `GET` | `/api/health` | health and database readiness | authenticated edge/read-only |
 | `GET` | `/api/search` | dashboard/folder discovery | authenticated and role-scoped |
-| `GET` | `/api/datasources` | managed datasource inventory | administrator/operator only |
+| `GET` | `/api/datasources` | datasource inventory metadata | authenticated users with `datasources:read`; in the shipped OSS model this includes Viewer |
 | managed methods | dashboard APIs | source-managed dashboard provisioning | service identity only |
 | managed methods | folder APIs | source-managed folder provisioning | service identity only |
 
@@ -28,9 +28,11 @@ Expected unauthenticated behavior may be an OIDC redirect, `401`, or `403`. Unex
 - Anonymous access and default credentials are disabled.
 - Native Grafana publication remains loopback/private behind the approved edge.
 - Datasources are fixed and provisioned from source; credentials come from OpenBao or approved secret files.
+- The shipped Grafana OSS authorization model grants Viewer the fixed `datasources:read` permission when datasource-permission enforcement is unavailable. Production certification must not claim that `/api/datasources` is administrator-only.
+- Datasource responses must not disclose decrypted passwords, tokens, private keys, cookies, authorization headers, or secure JSON values.
 - A Loki datasource may link only to the matching business Tempo datasource.
 - Folder permissions alone are not accepted as datasource isolation.
-- Business user access remains disabled until organization-level or datasource-level isolation and negative cross-business tests pass.
+- Business user access remains disabled until organization-level isolation, datasource-level enforcement available in the deployed edition, or another reviewed equivalent boundary prevents cross-business datasource discovery and querying; negative cross-business tests must pass.
 - Grafana is read-only with respect to business systems and cannot receive broker, exchange, custody, lender, payment, provider, or communications authority.
 
 ## Production gates
@@ -41,8 +43,11 @@ OIDC_CONFIGURATION=PASS
 PKCE_S256=PASS
 ROLE_MAPPING=PASS
 ANONYMOUS_ACCESS=DISABLED
+OSS_VIEWER_DATASOURCE_READ_MODEL=DOCUMENTED
 DATASOURCE_PROVISIONING=PASS
 DASHBOARD_PROVISIONING=PASS
+ORGANIZATION_OR_DATASOURCE_ISOLATION=PASS
+DATASOURCE_SECRET_FIELDS_EXPOSED=0
 CROSS_BUSINESS_DENIAL=PASS
 IMMUTABLE_IMAGE_DIGEST=PASS
 IMAGE_SIGNATURE=PASS
@@ -60,11 +65,15 @@ ROLLBACK_MANIFEST=PASS
 GET_/api/health=PASS
 GET_/api/search_ROUTE_EXISTS=PASS
 GET_/api/datasources_ROUTE_EXISTS=PASS
+VIEWER_DATASOURCE_READ_BEHAVIOR=MATCHES_OSS_MODEL
+DATASOURCE_SECRET_FIELDS_EXPOSED=0
 OIDC_LOGIN=PASS
 OIDC_LOGOUT=PASS
 UNAUTHENTICATED_ADMIN_DENIED=PASS
-WRONG_ROLE_DENIED=PASS
-WRONG_BUSINESS_DENIED=PASS
+ADMIN_MUTATION_FROM_VIEWER_DENIED=PASS
+BUSINESS_USER_ACCESS_ENABLED=NO_UNTIL_ISOLATION_PROVEN
+CROSS_ORGANIZATION_DATASOURCE_DISCOVERY_DENIED=PASS
+WRONG_BUSINESS_QUERY_DENIED=PASS
 PROMETHEUS_DATASOURCE=PASS
 LOKI_DATASOURCE=PASS
 TEMPO_DATASOURCE=PASS
@@ -73,6 +82,8 @@ UNEXPECTED_404=0
 UNEXPECTED_5XX=0
 SOURCE_RUNTIME_DRIFT=0
 ```
+
+The datasource-read test must use the actual OSS permission model. It must not falsely interpret an expected authenticated Viewer response as an authorization bypass; the isolation test instead proves that no business user can discover or query another organization's datasource and that all secure fields remain redacted.
 
 ## Recovery and repository-first remediation
 
