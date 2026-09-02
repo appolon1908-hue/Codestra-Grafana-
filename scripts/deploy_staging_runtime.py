@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -31,6 +32,16 @@ def validate_deployment_identity() -> None:
         raise PreflightError(
             "staging Grafana deployment must run as root so UID-472-owned "
             "secret files can be validated without weakening their modes"
+        )
+
+
+def validate_isolated_interpreter() -> None:
+    """Require a startup mode that cannot import from the checkout."""
+
+    if not sys.flags.isolated:
+        raise PreflightError(
+            "deployment must invoke /usr/bin/python3 with -I so imports cannot "
+            "be resolved from the checkout before source protection is validated"
         )
 
 
@@ -89,6 +100,11 @@ def validate_protected_checkout(
         )
     _validate_protected_tree(
         git_directory, "deployment Git metadata", required_uid
+    )
+    _validate_protected_path(
+        repo / "scripts",
+        "deployment entrypoint parent",
+        required_uid,
     )
     _validate_protected_path(
         repo / "scripts" / "deploy_staging_runtime.py",
@@ -205,6 +221,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.mode == "deploy":
+        validate_isolated_interpreter()
         validate_deployment_identity()
         validate_protected_checkout()
     validate_source(args.source_sha, require_merged=args.mode == "deploy")

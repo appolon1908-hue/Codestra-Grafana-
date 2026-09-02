@@ -14,6 +14,7 @@ import yaml
 from deploy_staging_runtime import (
     PreflightError,
     validate_deployment_identity,
+    validate_isolated_interpreter,
     validate_protected_checkout,
     validate_secret_content,
 )
@@ -128,6 +129,7 @@ def main() -> None:
         'f"+refs/heads/main:{CANONICAL_MAIN_REF}"',
         '"merge-base",',
         "validate_protected_checkout()",
+        "validate_isolated_interpreter()",
         '"--force-recreate"',
         '"--wait-timeout"',
         '"grafana"',
@@ -163,6 +165,18 @@ def main() -> None:
             required_uid=protected.stat().st_uid,
             ancestry_root=Path(temporary),
         )
+        (protected / "scripts").chmod(0o777)
+        try:
+            validate_protected_checkout(
+                protected,
+                required_uid=protected.stat().st_uid,
+                ancestry_root=Path(temporary),
+            )
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("writable entrypoint parent was accepted")
+        (protected / "scripts").chmod(0o755)
         (runtime / "compose.yaml").chmod(0o666)
         try:
             validate_protected_checkout(
@@ -186,6 +200,13 @@ def main() -> None:
             pass
         else:
             raise AssertionError("symlinked deployment source was accepted")
+    if not __import__("sys").flags.isolated:
+        try:
+            validate_isolated_interpreter()
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("non-isolated deployment interpreter was accepted")
     assert "root_url = https://graf.codestra.media/" in (
         STAGING / "grafana.ini"
     ).read_text(encoding="utf-8")

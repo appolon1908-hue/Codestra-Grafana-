@@ -67,8 +67,14 @@ git -C /opt/codestra-observability/grafana-authority fetch --no-tags origin refs
 git -C /opt/codestra-observability/grafana-authority checkout --detach <accepted-main-sha>
 chown -R root:root /opt/codestra-observability/grafana-authority
 chmod -R go-w /opt/codestra-observability/grafana-authority
-python3 /opt/codestra-observability/grafana-authority/scripts/deploy_staging_runtime.py ...
+/usr/bin/python3 -I /opt/codestra-observability/grafana-authority/scripts/deploy_staging_runtime.py ...
 ```
+
+The mandatory `-I` interpreter mode removes the checkout and caller working
+directory from Python's import path before the entrypoint starts. Deployment
+preflight also rejects a writable `scripts/` parent directory, so the
+entrypoint cannot be replaced or shadow standard-library imports before its
+recursive source checks run.
 
 This isolated dashboard runtime is intentionally stateless: its SQLite data
 directory is a private tmpfs and all dashboards and datasources are
