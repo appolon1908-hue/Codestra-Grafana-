@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "artifactModel": "repository-configured-signed-image",
+  "imageId": "grafana",
+  "buildFrontendImage": "docker.io/docker/dockerfile@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e",
+  "builderTag": "3.13.7-slim-bookworm",
+  "builderImage": "docker.io/library/python@sha256:adafcc17694d715c905b4c7bebd96907a1fd5cf183395f0ebc4d3428bd22d92d",
+  "builderLinuxAmd64Manifest": "sha256:781449467ffb6f04218f09b1ecdcdc7d22b289ee5da9ec498b024e24ad7a6db7",
+  "upstreamRelease": "v13.2.1",
+  "upstreamReleaseCommit": "56cd3e9288d8255fecebe5d05b48d191f50674b5",
+  "upstreamImage": "docker.io/grafana/grafana@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283",
+  "upstreamLinuxAmd64Manifest": "sha256:1dec240d14e232597dce9bfa56dae55f4397b138cdc91e3ee92ac6b157e2fc49",
+  "upstreamSignature": {
+    "available": false,
+    "verification": "NO_OCI_SIGNATURE_OR_ATTESTATION_PUBLISHED"
+  },
+  "vendoredSourceExecutableUsed": false,
+  "productionActivation": false
+}

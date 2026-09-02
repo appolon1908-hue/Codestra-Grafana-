@@ -454,6 +454,7 @@ def validate_packaging() -> None:
         (
             "ARG PYTHON_BUILDER_IMAGE",
             "ARG GRAFANA_IMAGE",
+            "# syntax=docker.io/docker/dockerfile@sha256:",
             "AS dashboard-builder",
             "python3 scripts/generate_codestra_dashboards.py",
             "find codestra/dashboards",
@@ -461,6 +462,7 @@ def validate_packaging() -> None:
             "/etc/grafana/grafana.ini",
             "/etc/grafana/provisioning/",
             "/etc/grafana/codestra-dashboards/",
+            "/usr/share/codestra/runtime-base.lock.json",
             "USER 472:0",
         ),
         "codestra/deploy/Dockerfile",
@@ -508,9 +510,18 @@ def validate_packaging() -> None:
     image = str(service.get("image", ""))
     if "${CODESTRA_GRAFANA_IMAGE:" not in image or "sha256" not in image:
         fail("Grafana runtime image must require an immutable digest")
-    build_args = service.get("build", {}).get("args", {})
-    if set(build_args) != {"PYTHON_BUILDER_IMAGE", "GRAFANA_IMAGE"}:
-        fail("Grafana build must pin both builder and upstream base images")
+    if "build" in service:
+        fail("Grafana deployment Compose must be deploy-only")
+    environment = service.get("environment", {})
+    if environment.get("CODESTRA_SOURCE_SHA") != "${CODESTRA_SOURCE_SHA:?exact protected source SHA is required}":
+        fail("Grafana runtime source readback is missing")
+    if environment.get("CODESTRA_IMAGE_DIGEST") != "${CODESTRA_IMAGE_DIGEST:?exact sha256 image digest is required}":
+        fail("Grafana runtime image readback is missing")
+    secret_definitions = compose.get("secrets", {})
+    if set(secret_definitions) != expected_secrets:
+        fail("Grafana top-level secret-file set is incomplete")
+    if any(set(value) != {"file"} or not str(value["file"]).startswith("${GRAFANA_") for value in secret_definitions.values()):
+        fail("Grafana credentials must be supplied only as mounted files")
     limits = service.get("deploy", {}).get("resources", {}).get("limits", {})
     for key in ("cpus", "memory", "pids"):
         if key not in limits:
