@@ -38,6 +38,40 @@ class PrivatePostgresAuthorityTests(unittest.TestCase):
             AUTHORITY.contains_forbidden_postgres_hostname(retired)
         )
 
+    def test_generated_bytecode_is_excluded_from_source_scan(self) -> None:
+        self.assertTrue(
+            AUTHORITY.is_ignored_source_path(
+                ROOT / "scripts" / "__pycache__" / "validator.cpython-312.pyc"
+            )
+        )
+
+
+class RepositoryAliasAuthorityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.document = json.loads(
+            (ROOT / "governance" / "repository-name-aliases.v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.registry_text = (ROOT / "codestra" / "business-registry.json").read_text(
+            encoding="utf-8"
+        )
+
+    def test_exact_governed_alias_set_is_required(self) -> None:
+        changed = copy.deepcopy(self.document)
+        changed["mappings"].pop()
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(changed, self.registry_text)
+
+    def test_alias_names_are_bound_to_stable_repository_id(self) -> None:
+        changed = copy.deepcopy(self.document)
+        changed["mappings"][0]["current_repository"] = (
+            "appolon1908-hue/unreviewed-alias"
+        )
+        changed_registry = self.registry_text + " appolon1908-hue/unreviewed-alias"
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(changed, changed_registry)
+
 
 if __name__ == "__main__":
     unittest.main()

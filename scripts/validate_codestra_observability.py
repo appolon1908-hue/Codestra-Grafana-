@@ -23,6 +23,20 @@ REPOSITORY_ALIASES = ROOT / "governance" / "repository-name-aliases.v1.json"
 BUSINESS_REGISTRY = ROOT / "codestra" / "business-registry.json"
 FORBIDDEN_POSTGRES_HOST = "pgex" + ".codestra.media"
 PRIVATE_POSTGRES_IDENTITY = "postgres-exporter:9187"
+REQUIRED_REPOSITORY_ALIASES = {
+    1221155447: (
+        "appolon1908-hue/Frontend-Resturant-",
+        "appolon1908-hue/restaurant-frontend",
+    ),
+    1343761049: (
+        "appolon1908-hue/transportaion-Frontend",
+        "appolon1908-hue/freight-platform-frontend",
+    ),
+    1343962199: (
+        "appolon1908-hue/LARIM-A-Fornt-end",
+        "appolon1908-hue/LARIM-A-Frontend",
+    ),
+}
 
 
 def fail(message: str) -> None:
@@ -54,6 +68,25 @@ def contains_forbidden_postgres_hostname(text: str) -> bool:
     return FORBIDDEN_POSTGRES_HOST in text.lower()
 
 
+def is_ignored_source_path(path: Path) -> bool:
+    ignored_suffixes = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".woff",
+        ".woff2",
+        ".zip",
+        ".gz",
+        ".pyc",
+    }
+    return (
+        path.suffix.lower() in ignored_suffixes
+        or ".git" in path.parts
+        or "__pycache__" in path.parts
+    )
+
+
 def validate_postgres_exporter_document(document: Any) -> None:
     if document.get("schema_version") != "1.0":
         fail("private service authority schema_version must be 1.0")
@@ -83,18 +116,8 @@ def validate_postgres_exporter_authority() -> None:
     validate_postgres_exporter_document(document)
 
     allowed_literal_locations = {POSTGRES_POLICY.resolve()}
-    ignored_suffixes = {
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".woff",
-        ".woff2",
-        ".zip",
-        ".gz",
-    }
     for path in ROOT.rglob("*"):
-        if not path.is_file() or path.suffix.lower() in ignored_suffixes:
+        if not path.is_file() or is_ignored_source_path(path):
             continue
         if path.resolve() in allowed_literal_locations:
             continue
@@ -106,8 +129,7 @@ def validate_postgres_exporter_authority() -> None:
             )
 
 
-def validate_repository_aliases() -> None:
-    document = load_json(REPOSITORY_ALIASES)
+def validate_repository_alias_document(document: Any, registry_text: str) -> None:
     if document.get("schema_version") != "1.0":
         fail("repository alias schema_version must be 1.0")
     if document.get("status") != "PREPARED_NOT_RENAMED":
@@ -120,8 +142,6 @@ def validate_repository_aliases() -> None:
     repository_ids: set[int] = set()
     current_names: set[str] = set()
     target_names: set[str] = set()
-    registry_text = BUSINESS_REGISTRY.read_text(encoding="utf-8")
-
     for mapping in mappings:
         repository_id = mapping.get("repository_id")
         current = mapping.get("current_repository", "")
@@ -148,6 +168,33 @@ def validate_repository_aliases() -> None:
         repository_ids.add(repository_id)
         current_names.add(current)
         target_names.add(target)
+
+    expected_ids = set(REQUIRED_REPOSITORY_ALIASES)
+    if repository_ids != expected_ids:
+        missing = sorted(expected_ids - repository_ids)
+        unexpected = sorted(repository_ids - expected_ids)
+        fail(
+            "repository alias set differs from governed authority "
+            f"(missing={missing}, unexpected={unexpected})"
+        )
+
+    for mapping in mappings:
+        expected = REQUIRED_REPOSITORY_ALIASES[mapping["repository_id"]]
+        actual = (
+            mapping.get("current_repository"),
+            mapping.get("target_repository_after_cutover"),
+        )
+        if actual != expected:
+            fail(
+                "repository alias identity changed for stable ID "
+                f"{mapping['repository_id']}"
+            )
+
+
+def validate_repository_aliases() -> None:
+    document = load_json(REPOSITORY_ALIASES)
+    registry_text = BUSINESS_REGISTRY.read_text(encoding="utf-8")
+    validate_repository_alias_document(document, registry_text)
 
 
 def main() -> None:
