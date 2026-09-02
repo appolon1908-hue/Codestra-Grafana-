@@ -131,14 +131,18 @@ def main() -> None:
         "validate_protected_checkout()",
         "validate_isolated_interpreter()",
         'GIT = "/usr/bin/git"',
-        'DOCKER = "/usr/bin/docker"',
+        'COMPOSE_BIN = "/usr/libexec/docker/cli-plugins/docker-compose"',
         "[GIT, *args]",
-        '[DOCKER, "compose"',
+        '[COMPOSE_BIN, "-f"',
+        '"GIT_CONFIG_NOSYSTEM": "1"',
+        '"GIT_CONFIG_GLOBAL": "/dev/null"',
+        '"DOCKER_CONFIG": "/nonexistent"',
         '"--force-recreate"',
         '"--wait-timeout"',
         '"grafana"',
     ):
         assert required in deployer
+    assert "os.environ.copy()" not in deployer
     validate_secret_content(b"A" * 32, "test secret")
     for malformed in (b"\n" * 32, b"A" * 31, b"A" * 32 + b"\r\n"):
         try:
