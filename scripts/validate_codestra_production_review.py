@@ -17,6 +17,10 @@ from typing import Any
 
 import yaml
 
+# Loading the source validator must not create untracked bytecode inside the
+# repository because the validator deliberately scans the tree for binary or
+# secret-shaped material.
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "codestra" / "deploy" / "compose.candidate.yaml"
