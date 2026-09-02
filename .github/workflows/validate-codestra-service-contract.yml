@@ -27,3 +27,42 @@ jobs:
       expected_repository: 'appolon1908-hue/Codestra-Grafana-'
       expected_component: 'grafana'
       expected_contract_id: 'codestra.observability.grafana.v1'
+
+  required-surface:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact source head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Validate required Grafana API surface
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(f'GRAFANA_API_CONTRACT=FAIL reason={message}')
+
+          contract = json.loads(Path('codestra/api/service-contract.v1.json').read_text())
+          operations = contract['nativeApi']['operations']
+          actual = {(item['method'], item['path']) for item in operations}
+          required = {
+              ('GET', '/api/health'),
+              ('GET', '/api/search'),
+              ('GET', '/api/dashboards/uid/{uid}'),
+              ('GET', '/api/folders'),
+              ('GET', '/api/datasources'),
+              ('GET', '/api/datasources/uid/{uid}/health'),
+          }
+          require(required <= actual, f'missing_operations={sorted(required - actual)}')
+          require(contract['nativeApi']['authentication']['transport'] == 'edge_oidc', 'transport')
+          require(contract['safety']['anonymousManagementAccessAllowed'] is False, 'anonymous_access')
+          require(contract['safety']['crossBusinessDefaultAllowed'] is False, 'cross_business_default')
+          require(all(item['controlPlaneProxyAllowed'] is False for item in operations), 'control_proxy')
+          print('GRAFANA_API_CONTRACT=PASS')
+          PY

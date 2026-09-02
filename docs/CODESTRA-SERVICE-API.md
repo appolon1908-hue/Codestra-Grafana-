@@ -18,6 +18,9 @@ Contract: `codestra/api/service-contract.v1.json`
 | `GET` | `/api/health` | health | read_only | never proxied by the Codestra control API |
 | `GET` | `/api/health` | readiness | read_only | never proxied by the Codestra control API |
 | `GET` | `/api/search` | query | read_only | never proxied by the Codestra control API |
+| `GET` | `/api/dashboards/uid/{uid}` | query | read_only | never proxied by the Codestra control API |
+| `GET` | `/api/folders` | query | read_only | never proxied by the Codestra control API |
+| `GET` | `/api/datasources` | query | read_only | never proxied by the Codestra control API |
 | `GET` | `/api/datasources/uid/{uid}/health` | query | read_only | never proxied by the Codestra control API |
 | `POST` | `/api/ds/query` | query | query | never proxied by the Codestra control API |
 
