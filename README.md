@@ -51,9 +51,11 @@ non-other-writable directory. The deployment preflight recursively enforces
 that protection for the Git metadata, entrypoint, Compose file, dashboards,
 and provisioning source before Docker is invoked; Git worktrees and symlinks
 in that execution closure are rejected. Deployment mode must run as root: the
-preflight reads and validates the UID-472-owned `0400`/`0600` secret files
-without broadening their ownership or permissions. Render mode remains
-available to an unprivileged review account and never reads secret content.
+preflight reads and validates UID-472-owned mode-`0400`, single-link secret
+files whose complete ancestry is root-owned and non-writable by other
+accounts. That prevents pathname replacement after validation without
+broadening ownership or permissions. Render mode remains available to an
+unprivileged review account and never reads secret content.
 
 A root operator must prepare the protected source before running any repository
 code:
@@ -88,6 +90,12 @@ Deployment waits up to 120 seconds for the source-defined healthcheck.
 The deployment requires the canonical browser root
 `https://graf.codestra.media/`; redirects and generated links never expose the
 Docker-internal service name.
+
+The staging container is bounded to one CPU, 1 GiB of memory/swap, and 256
+processes. Runtime plugin administration and external plugin management are
+disabled in both environment and INI authority; the plugin catalog and public
+key retrieval are disabled so no unreviewed plugin can be downloaded into the
+writable data tmpfs.
 
 ## Safety
 

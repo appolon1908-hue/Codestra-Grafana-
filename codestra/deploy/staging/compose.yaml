@@ -13,6 +13,9 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
+    cpus: "1.0"
+    mem_limit: 1g
+    memswap_limit: 1g
     environment:
       GF_PATHS_CONFIG: /etc/grafana/grafana.ini
       GF_PATHS_DATA: /var/lib/grafana
@@ -26,6 +29,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_SECURITY_SECRET_KEY__FILE: /run/secrets/grafana_secret_key
       GF_SECURITY_COOKIE_SECURE: "true"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED: "false"
     expose:
       - "3000"
     volumes:

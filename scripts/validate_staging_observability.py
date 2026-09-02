@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import configparser
 import json
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -17,6 +19,7 @@ from deploy_staging_runtime import (
     validate_isolated_interpreter,
     validate_protected_checkout,
     validate_secret_content,
+    validate_secret_file,
 )
 
 
@@ -62,6 +65,10 @@ def main() -> None:
     assert service["read_only"] is True
     assert service["cap_drop"] == ["ALL"]
     assert service["security_opt"] == ["no-new-privileges:true"]
+    assert service["pids_limit"] == 256
+    assert service["cpus"] == "1.0"
+    assert service["mem_limit"] == "1g"
+    assert service["memswap_limit"] == "1g"
     assert service.get("privileged") in {None, False}
     assert "ports" not in service
     assert service["expose"] == ["3000"]
@@ -105,6 +112,11 @@ def main() -> None:
     assert service["environment"]["GF_SERVER_DOMAIN"] == "graf.codestra.media"
     assert service["environment"]["GF_SERVER_ENFORCE_DOMAIN"] == "true"
     assert service["environment"]["GF_SECURITY_COOKIE_SECURE"] == "true"
+    assert service["environment"]["GF_PLUGINS_PLUGIN_ADMIN_ENABLED"] == "false"
+    assert (
+        service["environment"]["GF_PLUGINS_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED"]
+        == "false"
+    )
     assert service["labels"]["com.codestra.source.sha"] == (
         "${GRAFANA_SOURCE_SHA:?exact merged source SHA is required}"
     )
@@ -137,6 +149,8 @@ def main() -> None:
         '"GIT_CONFIG_NOSYSTEM": "1"',
         '"GIT_CONFIG_GLOBAL": "/dev/null"',
         '"DOCKER_CONFIG": "/nonexistent"',
+        "validate_secret_ancestry(",
+        "os.O_NOFOLLOW",
         '"--force-recreate"',
         '"--wait-timeout"',
         '"grafana"',
@@ -151,6 +165,47 @@ def main() -> None:
             pass
         else:
             raise AssertionError("malformed effective secret was accepted")
+    with tempfile.TemporaryDirectory() as temporary:
+        protected_root = Path(temporary)
+        secret_directory = protected_root / "secrets"
+        secret_directory.mkdir()
+        secret = secret_directory / "grafana-secret"
+        secret.write_bytes(b"A" * 32)
+        secret.chmod(0o400)
+        validation_options = {
+            "required_file_uid": os.geteuid(),
+            "required_ancestry_uid": os.geteuid(),
+            "ancestry_root": protected_root,
+        }
+        validate_secret_file(secret, "test secret", **validation_options)
+        secret.chmod(0o600)
+        try:
+            validate_secret_file(secret, "test secret", **validation_options)
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("writable secret leaf was accepted")
+        secret.chmod(0o400)
+        secret_directory.chmod(0o777)
+        try:
+            validate_secret_file(secret, "test secret", **validation_options)
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("writable secret ancestry was accepted")
+        secret_directory.chmod(0o700)
+        symbolic_directory = protected_root / "symbolic-secrets"
+        symbolic_directory.symlink_to(secret_directory)
+        try:
+            validate_secret_file(
+                symbolic_directory / secret.name,
+                "test secret",
+                **validation_options,
+            )
+        except PreflightError:
+            pass
+        else:
+            raise AssertionError("symbolic secret ancestry was accepted")
     with patch("deploy_staging_runtime.os.geteuid", return_value=1000):
         try:
             validate_deployment_identity()
@@ -218,6 +273,14 @@ def main() -> None:
     assert "root_url = https://graf.codestra.media/" in (
         STAGING / "grafana.ini"
     ).read_text(encoding="utf-8")
+    ini = configparser.ConfigParser(interpolation=None)
+    ini.read_string(
+        "[DEFAULT]\n" + (STAGING / "grafana.ini").read_text(encoding="utf-8")
+    )
+    assert ini.getboolean("plugins", "plugin_admin_enabled") is False
+    assert ini.getboolean("plugins", "plugin_admin_external_manage_enabled") is False
+    assert ini.get("plugins", "plugin_catalog_url") == ""
+    assert ini.getboolean("plugins", "public_key_retrieval_disabled") is True
 
     datasource = yaml.safe_load(DATASOURCE.read_text(encoding="utf-8"))
     assert datasource["datasources"] == [

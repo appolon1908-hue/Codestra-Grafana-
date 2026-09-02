@@ -200,18 +200,70 @@ def validate_root_url(value: str) -> str:
     return value
 
 
-def validate_secret_file(path: Path, label: str) -> Path:
+def validate_secret_ancestry(
+    directory: Path,
+    label: str,
+    *,
+    required_uid: int = 0,
+    ancestry_root: Path = Path("/"),
+) -> None:
+    if not directory.is_absolute() or not ancestry_root.is_absolute():
+        raise PreflightError(f"{label} ancestry must be absolute")
+    try:
+        directory.relative_to(ancestry_root)
+    except ValueError as exc:
+        raise PreflightError(f"{label} is outside protected ancestry") from exc
+    current = directory
+    while True:
+        _validate_protected_path(current, f"{label} ancestry", required_uid)
+        if not current.is_dir():
+            raise PreflightError(f"{label} ancestry must contain only directories")
+        if current == ancestry_root:
+            break
+        if current == current.parent:
+            raise PreflightError(f"{label} protected ancestry root was not reached")
+        current = current.parent
+
+
+def validate_secret_file(
+    path: Path,
+    label: str,
+    *,
+    required_file_uid: int = 472,
+    required_ancestry_uid: int = 0,
+    ancestry_root: Path = Path("/"),
+) -> Path:
     if not path.is_absolute() or path.is_symlink():
         raise PreflightError(f"{label} must be an absolute non-symlink file")
+    absolute = Path(os.path.abspath(path))
     resolved = path.resolve(strict=True)
+    if absolute != resolved:
+        raise PreflightError(f"{label} ancestry must not contain symbolic links")
+    validate_secret_ancestry(
+        resolved.parent,
+        label,
+        required_uid=required_ancestry_uid,
+        ancestry_root=ancestry_root,
+    )
     info = resolved.stat()
-    if not stat.S_ISREG(info.st_mode) or info.st_size < 32 or info.st_size > 4096:
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 1
+        or info.st_size < 32
+        or info.st_size > 4096
+    ):
         raise PreflightError(f"{label} is missing or malformed")
-    if info.st_uid != 472:
-        raise PreflightError(f"{label} must be owned by Grafana uid 472")
-    if stat.S_IMODE(info.st_mode) not in {0o400, 0o600}:
-        raise PreflightError(f"{label} mode must be 0400 or 0600")
-    validate_secret_content(resolved.read_bytes(), label)
+    if info.st_uid != required_file_uid:
+        raise PreflightError(f"{label} has the wrong owner")
+    if stat.S_IMODE(info.st_mode) != 0o400:
+        raise PreflightError(f"{label} mode must be 0400")
+    descriptor = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+            raise PreflightError(f"{label} changed during validation")
+        raw = stream.read(4097)
+    validate_secret_content(raw, label)
     return resolved
 
 
