@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "2.0.0",
+  "repository": "appolon1908-hue/Codestra-Grafana-",
+  "classification": "vendor-operator-ui",
+  "targetBranch": "codex/codestra-orbit-v2-codestra-grafana",
+  "adoptionMode": "operator-theme-sso",
+  "domain": null,
+  "domainStatus": "pending-registration",
+  "requirements": {
+    "identitySSO": true,
+    "session": true,
+    "logout": true,
+    "logoutAll": true,
+    "browserTokenStorageProhibited": true,
+    "supportedTheme": true,
+    "sharedHeaderFooter": false,
+    "domainRegistry": true,
+    "operatorAccess": true,
+    "audit": true,
+    "rollback": true
+  },
+  "status": "branch-created",
+  "blockers": [
+    "Use the approved Codestra identity, token, color, and operator-theme contracts after SDK-repository pull request 75 is protected-merged.",
+    "Apply branding, navigation links, and identity through supported Grafana configuration and plugins; preserve upstream upgrade compatibility.",
+    "Register the private operator hostname and verify SSO, logout, organization and folder isolation, anonymous-access denial, monitoring, upgrades, and rollback evidence before promotion."
+  ]
+}
