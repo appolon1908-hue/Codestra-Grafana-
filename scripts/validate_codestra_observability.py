@@ -130,25 +130,33 @@ def validate_postgres_exporter_authority() -> None:
 
 
 def registry_repositories(registry_text: str) -> set[str]:
+    """Return only repositories that are operational business applications."""
+
     try:
         registry = json.loads(registry_text)
     except json.JSONDecodeError:
         fail("business registry is not valid JSON")
+    if not isinstance(registry, dict):
+        fail("business registry root must be an object")
+
+    businesses = registry.get("businesses")
+    if not isinstance(businesses, list):
+        fail("business registry businesses must be a list")
 
     repositories: set[str] = set()
-
-    def collect(value: Any) -> None:
-        if isinstance(value, dict):
-            repository = value.get("repo")
-            if isinstance(repository, str):
-                repositories.add(repository)
-            for child in value.values():
-                collect(child)
-        elif isinstance(value, list):
-            for child in value:
-                collect(child)
-
-    collect(registry)
+    for business in businesses:
+        if not isinstance(business, dict):
+            fail("business registry contains a non-object business")
+        operational = business.get("repositories")
+        if not isinstance(operational, list):
+            fail("business registry business repositories must be a list")
+        for item in operational:
+            if not isinstance(item, dict):
+                fail("business registry contains a non-object repository record")
+            repository = item.get("repo")
+            if not isinstance(repository, str) or not repository:
+                fail("business registry operational repository is invalid")
+            repositories.add(repository)
     return repositories
 
 
