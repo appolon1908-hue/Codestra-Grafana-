@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import yaml
@@ -70,6 +72,29 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return value
 
 
+def load_base_validator() -> ModuleType:
+    path = ROOT / "scripts" / "validate_codestra_observability.py"
+    spec = importlib.util.spec_from_file_location("codestra_grafana_base_validator", path)
+    if spec is None or spec.loader is None:
+        fail("cannot load base Grafana validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def validate_existing_controls(module: ModuleType) -> dict[str, Any]:
+    data = module.validate_registry()
+    module.validate_ini()
+    module.validate_datasources()
+    module.validate_dashboard_provisioning()
+    module.validate_rbac()
+    module.validate_runtime()
+    module.validate_hostnames()
+    module.validate_generated_dashboards(data)
+    module.validate_secret_safety()
+    return data
+
+
 def validate_image_contract() -> None:
     compose = load_yaml(COMPOSE)
     service = compose.get("services", {}).get("grafana", {})
@@ -107,19 +132,57 @@ def validate_image_contract() -> None:
         if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
             fail(f"invalid sha256 digest variable: {digest_var}")
 
+    if service.get("read_only") is not True or service.get("user") != "472:0":
+        fail("Grafana must remain non-root with a read-only root filesystem")
+    if service.get("privileged") is True or service.get("network_mode") == "host":
+        fail("Grafana may not use privileged or host-network mode")
+    if "ALL" not in service.get("cap_drop", []):
+        fail("Grafana must drop all Linux capabilities")
+    if "no-new-privileges:true" not in service.get("security_opt", []):
+        fail("Grafana must set no-new-privileges")
+    if [str(port) for port in service.get("ports", [])] != [
+        "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    ]:
+        fail("Grafana must expose exactly one loopback-bound host port")
+    if set(service.get("networks", [])) != {
+        "codestra-observability",
+        "codestra-database",
+    }:
+        fail("Grafana network attachments exceed the approved allowlist")
+    expected_secrets = {
+        "grafana_oidc_client_secret",
+        "grafana_database_user",
+        "grafana_database_password",
+        "grafana_database_ca",
+        "grafana_secret_key",
+    }
+    if set(service.get("secrets", [])) != expected_secrets:
+        fail("Grafana runtime secret set is incomplete")
+    limits = service.get("deploy", {}).get("resources", {}).get("limits", {})
+    if not {"cpus", "memory", "pids"}.issubset(limits):
+        fail("Grafana runtime resource limits are incomplete")
+
 
 def validate_packaged_dashboard_pipeline() -> None:
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     required = (
+        "ARG PYTHON_BUILDER_IMAGE",
+        "ARG GRAFANA_IMAGE",
+        "FROM ${PYTHON_BUILDER_IMAGE} AS dashboard-builder",
         "COPY scripts/harden_codestra_dashboards.py scripts/harden_codestra_dashboards.py",
         "COPY codestra/provisioning/ codestra/provisioning/",
         "python3 scripts/harden_codestra_dashboards.py",
+        "FROM ${GRAFANA_IMAGE}",
         "COPY --from=dashboard-builder --chown=472:0 codestra/provisioning/ /etc/grafana/provisioning/",
         "COPY --from=dashboard-builder --chown=472:0 codestra/dashboards/ /etc/grafana/codestra-dashboards/",
+        "USER 472:0",
     )
     for fragment in required:
         if fragment not in dockerfile:
             fail(f"Dockerfile omits final dashboard hardening control: {fragment}")
+    for forbidden in ("COPY .env", "COPY *secret*", "latest AS", "curl | sh", "wget | sh"):
+        if forbidden.lower() in dockerfile.lower():
+            fail(f"Dockerfile contains forbidden packaging behavior: {forbidden}")
 
 
 def validate_provisioning_tree(root: Path) -> None:
@@ -225,11 +288,8 @@ def validate_hardened_generated_dashboards(root: Path) -> None:
 
 
 def validate_final_artifacts() -> None:
-    subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "validate_codestra_observability.py")],
-        cwd=ROOT,
-        check=True,
-    )
+    module = load_base_validator()
+    validate_existing_controls(module)
     with tempfile.TemporaryDirectory(prefix="codestra-grafana-final-") as temporary:
         output_root = Path(temporary)
         (output_root / "codestra").mkdir(parents=True)
