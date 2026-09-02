@@ -1,0 +1,29 @@
+name: Validate Codestra service API contract
+
+on:
+  pull_request:
+    paths:
+      - 'codestra/api/service-contract.v1.json'
+      - 'docs/CODESTRA-SERVICE-API.md'
+      - '.github/workflows/validate-codestra-service-contract.yml'
+  push:
+    branches: [development, test, staging, production, main, 'feature/**']
+    paths:
+      - 'codestra/api/service-contract.v1.json'
+      - 'docs/CODESTRA-SERVICE-API.md'
+      - '.github/workflows/validate-codestra-service-contract.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codestra-service-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-validate-service-contract.yml@fbb8a184cfab911dd8c3b844342e880ee59d55bd
+    with:
+      expected_repository: 'appolon1908-hue/Codestra-Grafana-'
+      expected_component: 'grafana'
+      expected_contract_id: 'codestra.observability.grafana.v1'
