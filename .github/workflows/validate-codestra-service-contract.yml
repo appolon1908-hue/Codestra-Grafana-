@@ -22,11 +22,12 @@ concurrency:
 
 jobs:
   validate:
-    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-validate-service-contract.yml@c2eb8e9a07942d64402f641f1068cfaec24b3409
+    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-validate-service-contract.yml@1ca489c9060d79f849eb7d656f9c85c4b4b56cac
     with:
       expected_repository: 'appolon1908-hue/Codestra-Grafana-'
       expected_component: 'grafana'
       expected_contract_id: 'codestra.observability.grafana.v1'
+      schema_authority_revision: '1ca489c9060d79f849eb7d656f9c85c4b4b56cac'
 
   required-surface:
     runs-on: ubuntu-24.04
