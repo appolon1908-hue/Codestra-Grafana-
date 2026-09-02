@@ -150,7 +150,7 @@ def main() -> None:
             raise AssertionError("non-root deployment authority was accepted")
     with patch("deploy_staging_runtime.os.geteuid", return_value=0):
         validate_deployment_identity()
-    with tempfile.TemporaryDirectory(dir="/root") as temporary:
+    with tempfile.TemporaryDirectory() as temporary:
         protected = Path(temporary) / "authority"
         (protected / ".git").mkdir(parents=True)
         (protected / "scripts").mkdir()
@@ -158,10 +158,18 @@ def main() -> None:
         runtime = protected / "codestra" / "deploy" / "staging"
         runtime.mkdir(parents=True)
         (runtime / "compose.yaml").write_text("services: {}\n")
-        validate_protected_checkout(protected)
+        validate_protected_checkout(
+            protected,
+            required_uid=protected.stat().st_uid,
+            ancestry_root=Path(temporary),
+        )
         (runtime / "compose.yaml").chmod(0o666)
         try:
-            validate_protected_checkout(protected)
+            validate_protected_checkout(
+                protected,
+                required_uid=protected.stat().st_uid,
+                ancestry_root=Path(temporary),
+            )
         except PreflightError:
             pass
         else:
@@ -169,7 +177,11 @@ def main() -> None:
         (runtime / "compose.yaml").chmod(0o644)
         (runtime / "escape").symlink_to("/tmp")
         try:
-            validate_protected_checkout(protected)
+            validate_protected_checkout(
+                protected,
+                required_uid=protected.stat().st_uid,
+                ancestry_root=Path(temporary),
+            )
         except PreflightError:
             pass
         else:
