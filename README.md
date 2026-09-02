@@ -74,7 +74,9 @@ The mandatory `-I` interpreter mode removes the checkout and caller working
 directory from Python's import path before the entrypoint starts. Deployment
 preflight also rejects a writable `scripts/` parent directory, so the
 entrypoint cannot be replaced or shadow standard-library imports before its
-recursive source checks run.
+recursive source checks run. Privileged Git and Docker subprocesses use their
+fixed root-owned `/usr/bin` paths and do not trust an inherited executable
+search path.
 
 This isolated dashboard runtime is intentionally stateless: its SQLite data
 directory is a private tmpfs and all dashboards and datasources are

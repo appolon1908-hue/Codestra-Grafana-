@@ -19,6 +19,8 @@ SHA40 = re.compile(r"^[0-9a-f]{40}$")
 CANONICAL_ROOT_URL = "https://graf.codestra.media/"
 CANONICAL_REPOSITORY = "https://github.com/appolon1908-hue/Codestra-Grafana-.git"
 CANONICAL_MAIN_REF = "refs/remotes/codestra-canonical/main"
+GIT = "/usr/bin/git"
+DOCKER = "/usr/bin/docker"
 
 
 class PreflightError(RuntimeError):
@@ -120,7 +122,7 @@ def validate_protected_checkout(
 
 def git_output(*args: str) -> str:
     result = subprocess.run(
-        ["git", *args],
+        [GIT, *args],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -142,7 +144,7 @@ def validate_source(source_sha: str, *, require_merged: bool) -> None:
     if require_merged:
         refreshed = subprocess.run(
             [
-                "git",
+                GIT,
                 "fetch",
                 "--quiet",
                 "--no-tags",
@@ -158,7 +160,7 @@ def validate_source(source_sha: str, *, require_merged: bool) -> None:
         if refreshed.returncode != 0:
             raise PreflightError("canonical main branch could not be refreshed")
         merged = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", source_sha, CANONICAL_MAIN_REF],
+            [GIT, "merge-base", "--is-ancestor", source_sha, CANONICAL_MAIN_REF],
             cwd=REPO,
             check=False,
             stdout=subprocess.DEVNULL,
@@ -245,7 +247,7 @@ def main() -> int:
             "GRAFANA_SECRET_KEY_FILE": str(key_file),
         }
     )
-    command = ["docker", "compose", "-f", str(COMPOSE)]
+    command = [DOCKER, "compose", "-f", str(COMPOSE)]
     if args.mode == "render":
         command.extend(("config", "--quiet"))
     else:
