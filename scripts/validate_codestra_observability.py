@@ -9,6 +9,7 @@ repository-name migration aliases.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -37,21 +38,23 @@ def load_json(path: Path) -> Any:
 
 
 def load_core() -> ModuleType:
-    source = CORE.read_text(encoding="utf-8")
-    retired_entry = f'    "{FORBIDDEN_POSTGRES_HOST}",\n'
-    if source.count(retired_entry) != 1:
-        fail("validator core does not contain the single expected retired-host entry")
-    source = source.replace(retired_entry, "", 1)
-
-    module = ModuleType("codestra_observability_validator_core")
-    module.__file__ = str(CORE)
+    spec = importlib.util.spec_from_file_location(
+        "codestra_observability_validator_core",
+        CORE,
+    )
+    if spec is None or spec.loader is None:
+        fail("validator core cannot be imported")
+    module = importlib.util.module_from_spec(spec)
     sys.modules[module.__name__] = module
-    exec(compile(source, str(CORE), "exec"), module.__dict__)
+    spec.loader.exec_module(module)
     return module
 
 
-def validate_postgres_exporter_authority() -> None:
-    document = load_json(POSTGRES_POLICY)
+def contains_forbidden_postgres_hostname(text: str) -> bool:
+    return FORBIDDEN_POSTGRES_HOST in text.lower()
+
+
+def validate_postgres_exporter_document(document: Any) -> None:
     if document.get("schema_version") != "1.0":
         fail("private service authority schema_version must be 1.0")
     if document.get("status") != "ACTIVE_SOURCE_AUTHORITY":
@@ -70,8 +73,16 @@ def validate_postgres_exporter_authority() -> None:
         fail("retired PostgreSQL Exporter public hostname is not explicitly forbidden")
     if service.get("exposure") != "PRIVATE_INTERNAL_ONLY":
         fail("PostgreSQL Exporter exposure must remain private/internal only")
+    for field in ("caddy_publication_allowed", "kong_publication_allowed"):
+        if service.get(field) is not False:
+            fail(f"PostgreSQL Exporter {field} must remain false")
 
-    allowed_literal_locations = {CORE.resolve(), POSTGRES_POLICY.resolve()}
+
+def validate_postgres_exporter_authority() -> None:
+    document = load_json(POSTGRES_POLICY)
+    validate_postgres_exporter_document(document)
+
+    allowed_literal_locations = {POSTGRES_POLICY.resolve()}
     ignored_suffixes = {
         ".png",
         ".jpg",
@@ -88,7 +99,7 @@ def validate_postgres_exporter_authority() -> None:
         if path.resolve() in allowed_literal_locations:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if FORBIDDEN_POSTGRES_HOST in text:
+        if contains_forbidden_postgres_hostname(text):
             fail(
                 "retired PostgreSQL Exporter public hostname remains in active source: "
                 f"{path.relative_to(ROOT)}"
