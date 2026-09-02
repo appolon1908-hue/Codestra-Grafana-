@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   validate:
-    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-validate-service-contract.yml@fbb8a184cfab911dd8c3b844342e880ee59d55bd
+    uses: appolon1908-hue/Codestra-Telemetry/.github/workflows/reusable-validate-service-contract.yml@c2eb8e9a07942d64402f641f1068cfaec24b3409
     with:
       expected_repository: 'appolon1908-hue/Codestra-Grafana-'
       expected_component: 'grafana'
