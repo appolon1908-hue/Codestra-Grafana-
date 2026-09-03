@@ -39,13 +39,29 @@ class PrivatePostgresAuthorityTests(unittest.TestCase):
 
     def test_decoded_json_hostname_is_rejected(self) -> None:
         raw = r'{"url":"pgex\u002ecodestra.media"}'
-        self.assertFalse(AUTHORITY.contains_forbidden_postgres_hostname(raw))
+        self.assertFalse("pgex.codestra.media" in raw.lower())
         document = AUTHORITY.load_json_text(raw, "synthetic-dashboard.json")
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_decoded_json_hostnames(
                 document,
                 "synthetic-dashboard.json",
             )
+
+    def test_percent_encoded_hostname_is_rejected(self) -> None:
+        encoded = "https://" + "pgex" + "%2e" + "codestra.media/metrics"
+        self.assertTrue(AUTHORITY.contains_forbidden_postgres_hostname(encoded))
+
+    def test_double_percent_encoded_hostname_is_rejected(self) -> None:
+        encoded = "https://" + "pgex" + "%252e" + "codestra.media/metrics"
+        self.assertTrue(AUTHORITY.contains_forbidden_postgres_hostname(encoded))
+
+    def test_html_encoded_hostname_is_rejected(self) -> None:
+        encoded = "https://" + "pgex" + "&#46;" + "codestra.media/metrics"
+        self.assertTrue(AUTHORITY.contains_forbidden_postgres_hostname(encoded))
+
+    def test_idna_dot_equivalent_hostname_is_rejected(self) -> None:
+        encoded = "pgex" + "\u3002" + "codestra.media"
+        self.assertTrue(AUTHORITY.contains_forbidden_postgres_hostname(encoded))
 
     def test_duplicate_json_keys_are_rejected(self) -> None:
         with self.assertRaises(SystemExit):
@@ -107,17 +123,13 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
         )
         self.registry_text = json.dumps(self.registry)
 
-    def repository_record(self, repository: str) -> dict:
+    @staticmethod
+    def restaurant_record(registry: dict) -> dict:
         return next(
             item
-            for business in self.registry["businesses"]
+            for business in registry["businesses"]
             for item in business["repositories"]
-            if item["repo"] == repository
-        )
-
-    def business(self, business_id: str) -> dict:
-        return next(
-            item for item in self.registry["businesses"] if item["id"] == business_id
+            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
         )
 
     def test_exact_governed_alias_set_is_required(self) -> None:
@@ -131,13 +143,7 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
         changed_registry = copy.deepcopy(self.registry)
         unreviewed = "appolon1908-hue/unreviewed-alias"
         changed_aliases["mappings"][0]["current_repository"] = unreviewed
-        restaurant = next(
-            item
-            for business in changed_registry["businesses"]
-            for item in business["repositories"]
-            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
-        )
-        restaurant["repo"] = unreviewed
+        self.restaurant_record(changed_registry)["repo"] = unreviewed
 
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_repository_alias_document(
@@ -145,7 +151,7 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
                 json.dumps(changed_registry),
             )
 
-    def test_alias_is_bound_to_expected_business_and_service(self) -> None:
+    def test_alias_is_bound_to_expected_business(self) -> None:
         changed = copy.deepcopy(self.registry)
         restaurant_business = next(
             item for item in changed["businesses"] if item["id"] == "restaurant"
@@ -170,15 +176,29 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
                 json.dumps(changed),
             )
 
+    def test_alias_is_bound_to_expected_service(self) -> None:
+        changed = copy.deepcopy(self.registry)
+        self.restaurant_record(changed)["service"] = "unapproved-restaurant-service"
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(
+                self.document,
+                json.dumps(changed),
+            )
+
+    def test_alias_is_bound_to_expected_profile(self) -> None:
+        changed = copy.deepcopy(self.registry)
+        self.restaurant_record(changed)["profile"] = "backend"
+        with self.assertRaises(SystemExit):
+            AUTHORITY.validate_repository_alias_document(
+                self.document,
+                json.dumps(changed),
+            )
+
     def test_registry_repository_comparison_is_exact(self) -> None:
         changed = copy.deepcopy(self.registry)
-        restaurant = next(
-            item
-            for business in changed["businesses"]
-            for item in business["repositories"]
-            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
+        self.restaurant_record(changed)["repo"] = (
+            "appolon1908-hue/Frontend-Resturant--renamed"
         )
-        restaurant["repo"] = "appolon1908-hue/Frontend-Resturant--renamed"
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_repository_alias_document(
                 self.document,
@@ -187,13 +207,9 @@ class RepositoryAliasAuthorityTests(unittest.TestCase):
 
     def test_non_operational_metadata_cannot_mask_removed_repository(self) -> None:
         changed = copy.deepcopy(self.registry)
-        restaurant = next(
-            item
-            for business in changed["businesses"]
-            for item in business["repositories"]
-            if item["repo"] == "appolon1908-hue/Frontend-Resturant-"
+        self.restaurant_record(changed)["repo"] = (
+            "appolon1908-hue/unapproved-restaurant-frontend"
         )
-        restaurant["repo"] = "appolon1908-hue/unapproved-restaurant-frontend"
         changed.setdefault("platform_services", []).append(
             {"repo": "appolon1908-hue/Frontend-Resturant-"}
         )
