@@ -1,0 +1,75 @@
+name: codestra-grafana-staging
+
+services:
+  grafana:
+    image: grafana/grafana:13.2.0@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b
+    container_name: codestra-grafana-staging
+    init: true
+    restart: unless-stopped
+    user: "472:0"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    cpus: "1.0"
+    mem_limit: 1g
+    memswap_limit: 1g
+    environment:
+      GF_PATHS_CONFIG: /etc/grafana/grafana.ini
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_PATHS_LOGS: /var/log/grafana
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SERVER_DOMAIN: graf.codestra.media
+      GF_SERVER_ENFORCE_DOMAIN: "true"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:?approved browser-reachable Grafana root URL is required}
+      GF_SECURITY_ADMIN_USER: codestra-observability
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_SECRET_KEY__FILE: /run/secrets/grafana_secret_key
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    expose:
+      - "3000"
+    volumes:
+      - ./grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/etc/grafana/dashboards:ro
+    secrets:
+      - source: grafana_admin_password
+        target: grafana_admin_password
+        mode: 0440
+      - source: grafana_secret_key
+        target: grafana_secret_key
+        mode: 0440
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /var/lib/grafana:rw,noexec,nosuid,nodev,size=512m,uid=472,gid=0,mode=0750
+      - /var/log/grafana:rw,noexec,nosuid,nodev,size=64m,uid=472,gid=0,mode=0750
+    networks:
+      codestra_observability: {}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -Eq '\"database\"[[:space:]]*:[[:space:]]*\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      com.codestra.service: grafana
+      com.codestra.environment: staging
+      com.codestra.source.repository: appolon1908-hue/Codestra-Grafana-
+      com.codestra.source.sha: ${GRAFANA_SOURCE_SHA:?exact merged source SHA is required}
+
+networks:
+  codestra_observability:
+    external: true
+    name: codestra-observability
+
+secrets:
+  grafana_admin_password:
+    file: ${GRAFANA_ADMIN_PASSWORD_FILE:?protected Grafana admin password file is required}
+  grafana_secret_key:
+    file: ${GRAFANA_SECRET_KEY_FILE:?protected Grafana state secret file is required}
