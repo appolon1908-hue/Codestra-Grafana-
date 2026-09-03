@@ -232,13 +232,22 @@ def validate_repository_aliases() -> None:
 def main() -> None:
     core = load_core()
     original_validate_hostnames = core.validate_hostnames
+    original_validate_generated_dashboards = core.validate_generated_dashboards
 
     def governed_validate_hostnames() -> None:
         original_validate_hostnames()
         validate_postgres_exporter_authority()
         validate_repository_aliases()
 
+    def governed_validate_generated_dashboards(data: dict[str, Any]) -> None:
+        original_validate_generated_dashboards(data)
+        # The generator can construct strings from fragments after the initial
+        # source scan. Re-run the governed hostname and repository checks on
+        # every materialized dashboard before the core validator prints PASS.
+        governed_validate_hostnames()
+
     core.validate_hostnames = governed_validate_hostnames
+    core.validate_generated_dashboards = governed_validate_generated_dashboards
     core.main()
 
 
