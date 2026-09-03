@@ -35,7 +35,6 @@ ALLOWED_MEDIA_HOSTS = {
     "supe.codestra.media",
     "node.codestra.media",
     "cadv.codestra.media",
-    "pgex.codestra.media",
     "rdex.codestra.media",
     "blac.codestra.media",
     "allo.codestra.media",
