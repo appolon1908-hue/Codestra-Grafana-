@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Check out exact head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -31,7 +33,17 @@ jobs:
       - name: Compile deterministic generators and validators
         env:
           PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
-        run: python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py
+        run: |
+          python -m py_compile \
+            scripts/generate_codestra_dashboards.py \
+            scripts/validate_codestra_observability.py \
+            validator_core/validate_codestra_observability_core.py \
+            tests/test_private_postgres_authority.py
+
+      - name: Run private-service and repository-alias regression tests
+        env:
+          PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
+        run: python -m unittest discover -s tests -p 'test_*.py'
 
       - name: Validate registry, SSO, datasources, RBAC, dashboards, and packaging
         run: python scripts/validate_codestra_observability.py
