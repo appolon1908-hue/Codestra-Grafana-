@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
+"""Fail-closed validation for the Codestra Grafana corporate overlay."""
+
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
@@ -13,20 +15,29 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CODESTRA = ROOT / "codestra"
 REGISTRY = CODESTRA / "business-registry.json"
-INI = CODESTRA / "grafana.ini"
-DATASOURCE_DIR = CODESTRA / "provisioning" / "datasources"
-DASHBOARD_PROVISIONING = CODESTRA / "provisioning" / "dashboards" / "dashboards.yml"
-DASHBOARDS = CODESTRA / "dashboards"
+INI = CODESTRA / "config" / "grafana.ini"
+DATASOURCES = CODESTRA / "provisioning" / "datasources" / "codestra.yml"
+DASHBOARD_PROVISIONING = CODESTRA / "provisioning" / "dashboards" / "codestra.yml"
 RBAC = CODESTRA / "rbac-policy.json"
 RUNTIME = CODESTRA / "runtime.v1.json"
 COMPOSE = CODESTRA / "deploy" / "compose.candidate.yaml"
 DOCKERFILE = CODESTRA / "deploy" / "Dockerfile"
-ENTRYPOINT = CODESTRA / "deploy" / "entrypoint.sh"
+DASHBOARDS = CODESTRA / "dashboards"
 GENERATOR = ROOT / "scripts" / "generate_codestra_dashboards.py"
 
 ALLOWED_MEDIA_HOSTS = {
     "graf.codestra.media",
+    "prom.codestra.media",
+    "aler.codestra.media",
+    "loki.codestra.media",
+    "temp.codestra.media",
+    "otel.codestra.media",
     "supe.codestra.media",
+    "node.codestra.media",
+    "cadv.codestra.media",
+    "rdex.codestra.media",
+    "blac.codestra.media",
+    "allo.codestra.media",
     "bao.codestra.media",
 }
 REQUIRED_BUSINESSES = {
@@ -44,43 +55,97 @@ REQUIRED_BUSINESSES = {
     "restaurant",
     "provisioning",
 }
-REQUIRED_TITLES = {
-    "Codestra Platform Command Center",
-    "Codestra API Operations",
+REQUIRED_PLATFORM_SERVICES = {
+    "caddy",
+    "kong",
+    "keycloak",
+    "middleware",
+    "odoo",
+    "n8n",
+    "vicidial",
+    "prometheus",
+    "loki",
+    "tempo",
+    "grafana",
+    "opentelemetry-collector",
+    "alloy",
+    "node-exporter",
+    "cadvisor",
+    "redis-exporter",
+    "blackbox-exporter",
+    "superset",
+    "openbao",
 }
-REQUIRED_DASHBOARD_TOKENS = {
-    "codestra_http_requests_total",
-    "codestra_http_request_duration_seconds",
-    "codestra_outbox_backlog",
-    "codestra_inbox_backlog",
-    "codestra_authentication_failures_total",
-    "codestra_authorization_denials_total",
-    "codestra_reconciliation_failures_total",
-    "codestra_external_provider_failures_total",
-    "codestra_deployment_info",
-    "codestra_capability_state",
+EXPECTED_DATASOURCES = {
+    "codestra-prometheus": ("prometheus", "http://prometheus:9090"),
+    "codestra-loki": ("loki", "http://loki-query:3100"),
+    "codestra-tempo": ("tempo", "http://tempo:3200"),
+    "codestra-alertmanager": ("alertmanager", "http://alertmanager:9093"),
+}
+EXPECTED_FOLDER_UIDS = {
+    "codestra-executive",
+    "codestra-incident",
+    "codestra-platform",
+    "codestra-business",
+    "codestra-environment",
+    "codestra-server",
+    "codestra-database",
+    "codestra-api",
+    "codestra-security",
+    "codestra-contact-center",
+    "codestra-deployment",
+    "codestra-slo",
+}
+EXPECTED_OAUTH_ROLES = {
+    "observability-viewer": "Viewer",
+    "observability-operator": "Editor",
+    "observability-admin": "GrafanaAdmin",
 }
 FORBIDDEN_DASHBOARD_TOKENS = {
-    "tenant_id",
-    "customer_id",
-    "account_id",
-    "user_id",
-    "request_id",
-    "correlation_id",
-    "trace_id",
-    "span_id",
-    "email",
-    "phone",
-    "message_id",
-    "order_id",
-    "workflow_id",
-    "execution_id",
-    "raw_url",
-    "query_string",
-    "db_statement",
-    "container_id",
-    "pod_uid",
-    "exception_message",
+    "codestra_managed",
+    "http_server_requests_total",
+    "codestra_build_info",
+    "tenant_id=",
+    "tenant_id=~",
+    "customer_id=",
+    "customer_id=~",
+    "account_id=",
+    "account_id=~",
+    "user_id=",
+    "user_id=~",
+}
+REQUIRED_DASHBOARD_TOKENS = {
+    "codestra:http_requests:rate5m",
+    "codestra:http_error_ratio:5m",
+    "codestra:http_duration_seconds:p95_5m",
+    "codestra:slo_http_burn_rate:5m",
+    "codestra:deployment_info:max",
+    "ALERTS",
+    "codestra_business",
+    "environment",
+    "region",
+    "deployment",
+    "service",
+}
+REQUIRED_TITLES = {
+    "Executive Platform Health",
+    "Incident Triage — What broke, where, who is affected, what changed?",
+    "Infrastructure Health",
+    "Middleware Transactions",
+    "Operations Dashboard API",
+    "Kong API Gateway",
+    "Keycloak Authentication",
+    "Odoo Health and Integration",
+    "n8n Workflow Health",
+    "VICIdial Call Center",
+    "PostgreSQL Health",
+    "Redis Health",
+    "Caddy Edge",
+    "Deployment and Version",
+    "Security Events",
+    "SLO and Error Budget",
+    "Environment Health",
+    "Server and Container Health",
 }
 
 
@@ -89,206 +154,329 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def load_json(path: Path) -> dict[str, Any]:
+def load_json(path: Path) -> Any:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         fail(f"invalid JSON {path.relative_to(ROOT)}: {exc}")
-    if not isinstance(value, dict):
-        fail(f"JSON root must be an object: {path.relative_to(ROOT)}")
-    return value
 
 
-def load_yaml(path: Path) -> dict[str, Any]:
+def load_yaml(path: Path) -> Any:
     try:
-        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:
         fail(f"invalid YAML {path.relative_to(ROOT)}: {exc}")
-    if not isinstance(value, dict):
-        fail(f"YAML root must be an object: {path.relative_to(ROOT)}")
-    return value
+
+
+def require_fragments(text: str, fragments: tuple[str, ...], source: str) -> None:
+    for fragment in fragments:
+        if fragment not in text:
+            fail(f"{source} must contain: {fragment}")
 
 
 def reject_fragments(text: str, fragments: tuple[str, ...], source: str) -> None:
     lowered = text.lower()
     for fragment in fragments:
         if fragment.lower() in lowered:
-            fail(f"forbidden fragment {fragment!r} in {source}")
+            fail(f"{source} contains forbidden content: {fragment}")
 
 
 def validate_registry() -> dict[str, Any]:
-    registry = load_json(REGISTRY)
-    if registry.get("version") != 2:
-        fail("business registry version must be 2")
-    if registry.get("owner") != "Codestra Platform":
-        fail("business registry owner is incorrect")
-    if registry.get("status") != "CONFIG_PREPARED_NOT_DEPLOYED":
-        fail("business registry must remain source-only")
+    data = load_json(REGISTRY)
+    if data.get("schema_version") != "2.0":
+        fail("business registry schema_version must be 2.0")
+    if data.get("status") != "REGISTRY_PREPARED_NOT_DEPLOYED":
+        fail("business registry status must remain REGISTRY_PREPARED_NOT_DEPLOYED")
 
-    businesses = registry.get("businesses")
-    if not isinstance(businesses, list):
-        fail("business registry businesses must be a list")
-    ids = {item.get("id") for item in businesses if isinstance(item, dict)}
-    if ids != REQUIRED_BUSINESSES:
-        fail(f"business registry IDs differ from authority: {sorted(ids)}")
+    businesses = data.get("businesses", [])
+    business_ids = [business.get("id") for business in businesses]
+    if set(business_ids) != REQUIRED_BUSINESSES:
+        fail("business registry must exactly match the Codestra portfolio")
+    if len(business_ids) != len(set(business_ids)):
+        fail("duplicate business IDs")
 
-    repositories: set[str] = set()
+    repos: list[str] = []
+    services: list[str] = []
+    teams: list[str] = []
     for business in businesses:
-        if not isinstance(business, dict):
-            fail("business registry contains a non-object business")
-        if business.get("service_tier") not in {"tier_1", "tier_2"}:
-            fail(f"business has invalid service tier: {business.get('id')}")
-        items = business.get("repositories")
-        if not isinstance(items, list) or not items:
-            fail(f"business has no repository inventory: {business.get('id')}")
-        for item in items:
-            if not isinstance(item, dict):
-                fail("business registry contains a non-object repository")
-            repository = item.get("repo")
-            if not isinstance(repository, str) or not repository.startswith(
-                "appolon1908-hue/"
-            ):
-                fail(f"repository leaves approved owner: {repository}")
-            if repository in repositories:
-                fail(f"repository appears more than once: {repository}")
-            repositories.add(repository)
-            for field in ("application", "service", "authority"):
-                if not item.get(field):
-                    fail(f"repository {repository} is missing {field}")
+        if not business.get("display_name") or not business.get("service_tier"):
+            fail(f"business metadata is incomplete: {business.get('id')}")
+        teams.append(business.get("team", ""))
+        repositories = business.get("repositories", [])
+        if not repositories:
+            fail(f"business {business['id']} has no registered application")
+        for application in repositories:
+            if application.get("profile") not in {"frontend", "backend", "fullstack"}:
+                fail(f"invalid application profile for {application.get('repo')}")
+            if not application.get("repo", "").startswith("appolon1908-hue/"):
+                fail(f"unowned repository in registry: {application.get('repo')}")
+            repos.append(application["repo"])
+            services.append(application["service"])
 
-    platform_services = registry.get("platform_services")
-    if not isinstance(platform_services, list) or not platform_services:
-        fail("platform service authority is missing")
-    return registry
+    if len(repos) != len(set(repos)):
+        fail("a runtime repository is assigned to more than one business")
+    if len(services) != len(set(services)):
+        fail("duplicate canonical application service names")
+    if len(teams) != len(set(teams)) or any(not team for team in teams):
+        fail("business team names must be unique and non-empty")
+
+    platform_services = {
+        item.get("service")
+        for item in data.get("platform_services", [])
+        if isinstance(item, dict)
+    }
+    missing = REQUIRED_PLATFORM_SERVICES - platform_services
+    if missing:
+        fail(f"missing platform services: {sorted(missing)}")
+
+    telemetry_contract = data.get("telemetry_contract", {})
+    required_dimensions = {
+        "codestra_business",
+        "application",
+        "service",
+        "environment",
+        "server",
+        "region",
+        "deployment",
+    }
+    if set(telemetry_contract.get("required_labels", [])) != required_dimensions:
+        fail("registry telemetry dimensions do not match the corporate contract")
+    if telemetry_contract.get("customer_or_person_level_data") != "forbidden":
+        fail("customer/person-level Grafana data must remain forbidden")
+    return data
 
 
 def validate_ini() -> None:
     ini = INI.read_text(encoding="utf-8")
-    required = (
-        "[auth.generic_oauth]",
-        "enabled = true",
-        "allow_sign_up = false",
-        "use_pkce = true",
-        "auth_url = https://auth.codestra.co/realms/codestra/protocol/openid-connect/auth",
-        "token_url = https://auth.codestra.co/realms/codestra/protocol/openid-connect/token",
-        "api_url = https://auth.codestra.co/realms/codestra/protocol/openid-connect/userinfo",
-        "signout_redirect_url = https://auth.codestra.co/realms/codestra/protocol/openid-connect/logout",
-        "[auth.anonymous]",
-        "enabled = false",
-        "[users]",
-        "allow_sign_up = false",
-        "[security]",
-        "cookie_secure = true",
-        "cookie_samesite = strict",
-        "strict_transport_security = true",
-        "strict_transport_security_preload = true",
-        "content_security_policy = true",
-        "[database]",
-        "type = postgres",
-        "ssl_mode = verify-full",
-        "[feature_toggles]",
-        "enable = accessControlOnCall",
+    require_fragments(
+        ini,
+        (
+            "app_mode = production",
+            "domain = graf.codestra.media",
+            "root_url = https://graf.codestra.media/",
+            "enforce_domain = true",
+            "type = postgres",
+            "ssl_mode = verify-full",
+            "user = $__file{/run/secrets/grafana_database_user}",
+            "password = $__file{/run/secrets/grafana_database_password}",
+            "ca_cert_path = /run/secrets/grafana_database_ca",
+            "disable_login_form = true",
+            "[auth.basic]\nenabled = false",
+            "[auth.proxy]\nenabled = false",
+            "client_id = grafana-observability",
+            "client_secret = $__file{/run/secrets/grafana_oidc_client_secret}",
+            "use_pkce = true",
+            "use_refresh_token = true",
+            "role_attribute_strict = true",
+            "observability-admin",
+            "observability-operator",
+            "observability-viewer",
+            "[auth.anonymous]\nenabled = false",
+            "disable_initial_admin_creation = true",
+            "secret_key = $__file{/run/secrets/grafana_secret_key}",
+            "encryption_provider = secretKey.v1",
+            "data_source_proxy_whitelist = prometheus:9090 loki-query:3100 tempo:3200 alertmanager:9093",
+            "cookie_secure = true",
+            "allow_embedding = false",
+            "strict_transport_security = true",
+            "content_security_policy = true",
+            "[snapshots]\nenabled = false",
+            "external_enabled = false",
+            "[public_dashboards]\nenabled = false",
+            "[unified_alerting]\nenabled = false",
+            "[alerting]\nenabled = false",
+            "[smtp]\nenabled = false",
+            "reporting_enabled = false",
+            "format = json",
+        ),
+        "codestra/config/grafana.ini",
     )
-    for fragment in required:
-        if fragment not in ini:
-            fail(f"grafana.ini is missing required setting: {fragment}")
     reject_fragments(
         ini,
         (
-            "enabled = true\norg_role = Admin",
-            "skip_org_role_sync = true",
-            "tls_skip_verify_insecure = true",
+            "admin_password = admin",
+            "client_secret = changeme",
             "allow_embedding = true",
+            "anonymous]\nenabled = true",
+            "smtp]\nenabled = true",
         ),
-        "codestra/grafana.ini",
+        "codestra/config/grafana.ini",
     )
 
 
 def validate_datasources() -> None:
-    files = sorted(DATASOURCE_DIR.glob("*.yml")) + sorted(
-        DATASOURCE_DIR.glob("*.yaml")
+    document = load_yaml(DATASOURCES)
+    if document.get("apiVersion") != 1 or document.get("prune") is not True:
+        fail("datasource provisioning must be apiVersion 1 with pruning enabled")
+    sources = document.get("datasources", [])
+    by_uid = {source.get("uid"): source for source in sources}
+    if set(by_uid) != set(EXPECTED_DATASOURCES):
+        fail("provisioned datasource UIDs do not match the corporate contract")
+
+    for uid, (kind, url) in EXPECTED_DATASOURCES.items():
+        source = by_uid[uid]
+        if source.get("type") != kind or source.get("url") != url:
+            fail(f"datasource {uid} does not use its private canonical endpoint")
+        if source.get("access") != "proxy" or source.get("editable") is not False:
+            fail(f"datasource {uid} must be server-proxy and immutable")
+        if source.get("jsonData", {}).get("tlsSkipVerify") is not False:
+            fail(f"datasource {uid} may not skip TLS verification policy")
+
+    prometheus = by_uid["codestra-prometheus"]
+    if prometheus.get("jsonData", {}).get("manageAlerts") is not False:
+        fail("Grafana may not manage Prometheus alerts")
+    if not prometheus.get("jsonData", {}).get("exemplarTraceIdDestinations"):
+        fail("Prometheus exemplars must link to Tempo")
+
+    loki = by_uid["codestra-loki"]
+    if not loki.get("jsonData", {}).get("derivedFields"):
+        fail("Loki must provide trace/correlation derived fields")
+
+    tempo = by_uid["codestra-tempo"]
+    tempo_json = tempo.get("jsonData", {})
+    if not tempo_json.get("tracesToLogsV2") or not tempo_json.get("tracesToMetrics"):
+        fail("Tempo log and metric correlation is incomplete")
+    if tempo_json.get("serviceMap", {}).get("datasourceUid") != "codestra-prometheus":
+        fail("Tempo service maps must use Codestra Prometheus")
+
+    alertmanager = by_uid["codestra-alertmanager"]
+    if alertmanager.get("jsonData", {}).get("handleGrafanaManagedAlerts") is not False:
+        fail("Alertmanager datasource must remain read-only")
+
+    serialized = DATASOURCES.read_text(encoding="utf-8")
+    reject_fragments(
+        serialized,
+        (
+            "https://prom.codestra.media",
+            "https://loki.codestra.media",
+            "https://temp.codestra.media",
+            "https://aler.codestra.media",
+            "basicAuthPassword",
+            "secureJsonData",
+        ),
+        "datasource provisioning",
     )
-    if not files:
-        fail("Grafana datasource provisioning is missing")
-    for path in files:
-        document = load_yaml(path)
-        for datasource in document.get("datasources", []):
-            if not isinstance(datasource, dict):
-                fail(f"invalid datasource in {path.relative_to(ROOT)}")
-            if datasource.get("editable") is not False:
-                fail(f"datasource must be source-fixed: {path.relative_to(ROOT)}")
-            if datasource.get("access") != "proxy":
-                fail(f"datasource must be server-side proxy: {path.relative_to(ROOT)}")
-            url = str(datasource.get("url", ""))
-            if not url or "localhost" in url or "127.0.0.1" in url:
-                fail(f"datasource URL is not a private service identity: {url}")
-            serialized = json.dumps(datasource).lower()
-            reject_fragments(
-                serialized,
-                (
-                    "basic_auth_password",
-                    '"password"',
-                    '"token"',
-                    "client_secret",
-                ),
-                str(path.relative_to(ROOT)),
-            )
 
 
 def validate_dashboard_provisioning() -> None:
     document = load_yaml(DASHBOARD_PROVISIONING)
-    providers = document.get("providers")
-    if not isinstance(providers, list) or len(providers) != 1:
-        fail("Grafana must have one dashboard provisioning provider")
-    provider = providers[0]
-    if provider.get("disableDeletion") is not True:
-        fail("dashboard deletion must be disabled")
-    if provider.get("allowUiUpdates") is not False:
-        fail("dashboard UI updates must be disabled")
-    if provider.get("updateIntervalSeconds", 0) < 30:
-        fail("dashboard provisioning interval is too aggressive")
-    if provider.get("options", {}).get("path") != "/etc/grafana/provisioning/dashboards/json":
-        fail("dashboard provisioning path is incorrect")
+    providers = document.get("providers", [])
+    folder_uids = {provider.get("folderUid") for provider in providers}
+    if folder_uids != EXPECTED_FOLDER_UIDS:
+        fail("dashboard folders do not match the corporate folder catalogue")
+    for provider in providers:
+        if provider.get("type") != "file":
+            fail(f"dashboard provider must be file-based: {provider.get('name')}")
+        if provider.get("disableDeletion") is not True:
+            fail(f"dashboard deletion must be disabled: {provider.get('name')}")
+        if provider.get("allowUiUpdates") is not False:
+            fail(f"UI updates must be disabled: {provider.get('name')}")
+        path = provider.get("options", {}).get("path", "")
+        if not path.startswith("/etc/grafana/codestra-dashboards/"):
+            fail(f"dashboard provider uses a non-immutable path: {provider.get('name')}")
 
 
 def validate_rbac() -> None:
-    rbac = load_json(RBAC)
-    if rbac.get("status") != "POLICY_PREPARED_NOT_APPLIED":
-        fail("Grafana RBAC policy must remain source-only")
-    if rbac.get("default_role") != "Viewer":
-        fail("Grafana default role must remain Viewer")
-    roles = rbac.get("roles")
-    if not isinstance(roles, dict):
-        fail("Grafana RBAC roles are missing")
-    if set(roles) != {"codestra-viewer", "codestra-editor", "codestra-admin"}:
-        fail("Grafana RBAC role inventory is incorrect")
-    if "admin" in roles["codestra-viewer"].get("permissions", []):
-        fail("viewer role may not have admin permission")
-    if rbac.get("business_access_enabled") is not False:
-        fail("cross-business Grafana access must remain disabled")
+    policy = load_json(RBAC)
+    if policy.get("schema_version") != "2.0":
+        fail("RBAC schema_version must be 2.0")
+    if policy.get("status") != "POLICY_PREPARED_NOT_APPLIED":
+        fail("RBAC policy must remain prepared, not applied")
+    if policy.get("default_org_role") != "Viewer":
+        fail("normal users must default to Viewer")
+    if policy.get("oauth_realm_roles") != EXPECTED_OAUTH_ROLES:
+        fail("OAuth realm-role mapping is not the approved corporate mapping")
+
+    privilege_rules = policy.get("privilege_rules", {})
+    expected_false = {
+        "anonymous_access",
+        "local_login_form",
+        "initial_local_admin",
+        "viewer_can_edit",
+        "grafana_managed_alerts",
+    }
+    for key in expected_false:
+        if privilege_rules.get(key) is not False:
+            fail(f"RBAC privilege must remain false: {key}")
+    if privilege_rules.get("provisioned_dashboards_are_read_only") is not True:
+        fail("provisioned dashboards must be read-only")
+
+    teams = policy.get("teams", [])
+    team_by_scope = {team.get("scope"): team for team in teams}
+    for business in REQUIRED_BUSINESSES:
+        team = team_by_scope.get(f"business:{business}")
+        if not team or team.get("permission") != "View":
+            fail(f"business team must exist with View permission: {business}")
+    boundary = policy.get("data_access_boundary", {})
+    if boundary.get("folder_permissions_are_not_datasource_isolation") is not True:
+        fail("RBAC policy must reject folder-only isolation claims")
+    if boundary.get("customer_or_person_level_data_forbidden") is not True:
+        fail("RBAC policy must forbid customer/person-level data")
 
 
 def validate_runtime() -> None:
     runtime = load_json(RUNTIME)
+    if runtime.get("schemaVersion") != "2.0":
+        fail("Grafana runtime schemaVersion must be 2.0")
     if runtime.get("status") != "CONFIG_PREPARED_NOT_DEPLOYED":
-        fail("Grafana runtime must remain source-only")
-    activation = runtime.get("activation")
-    if not isinstance(activation, dict) or not activation:
-        fail("Grafana runtime activation map is missing")
-    if any(value is not False for value in activation.values()):
-        fail("Grafana runtime activation flags must remain false")
-    if runtime.get("public_hostname") != "graf.codestra.media":
-        fail("Grafana public hostname authority is incorrect")
-    if runtime.get("oidc_issuer") != "https://auth.codestra.co/realms/codestra":
-        fail("Grafana OIDC issuer is incorrect")
+        fail("Grafana runtime must remain CONFIG_PREPARED_NOT_DEPLOYED")
+    if runtime.get("hostname") != "graf.codestra.media":
+        fail("Grafana runtime hostname mismatch")
+    if runtime.get("hostBind") != "127.0.0.1:3000":
+        fail("Grafana runtime must bind to loopback by default")
+    if runtime.get("publicNativePortAllowed") is not False:
+        fail("native Grafana port may not be public")
+    if set(runtime.get("businessScope", [])) != REQUIRED_BUSINESSES:
+        fail("Grafana runtime business scope is incomplete")
+    if runtime.get("oidc", {}).get("roleMapping") != EXPECTED_OAUTH_ROLES:
+        fail("runtime OIDC role mapping mismatch")
+    if runtime.get("oidc", {}).get("clientSecretFile") != "/run/secrets/grafana_oidc_client_secret":
+        fail("runtime OIDC secret must be file-injected")
+    if any(value is not False for value in runtime.get("activation", {}).values()):
+        fail("all Grafana activation gates must remain false before deployment evidence")
+    boundaries = runtime.get("authorityBoundaries", {})
+    for key in (
+        "grafanaManagedAlerting",
+        "businessMutation",
+        "customerLevelDataAuthority",
+        "tradingMutation",
+        "communicationsDelivery",
+        "folderPermissionsAloneClaimDatasourceIsolation",
+    ):
+        if boundaries.get(key) is not False:
+            fail(f"authority boundary must remain false: {key}")
 
 
 def validate_packaging() -> None:
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    require_fragments(
+        dockerfile,
+        (
+            "ARG PYTHON_BUILDER_IMAGE",
+            "ARG GRAFANA_IMAGE",
+            "AS dashboard-builder",
+            "python3 scripts/generate_codestra_dashboards.py",
+            "find codestra/dashboards",
+            "FROM ${GRAFANA_IMAGE}",
+            "/etc/grafana/grafana.ini",
+            "/etc/grafana/provisioning/",
+            "/etc/grafana/codestra-dashboards/",
+            "USER 472:0",
+        ),
+        "codestra/deploy/Dockerfile",
+    )
+    reject_fragments(
+        dockerfile,
+        ("COPY .env", "COPY *secret*", "latest AS", "curl | sh", "wget | sh"),
+        "codestra/deploy/Dockerfile",
+    )
+
     compose = load_yaml(COMPOSE)
-    services = compose.get("services")
-    if not isinstance(services, dict) or set(services) != {"grafana"}:
-        fail("Grafana candidate Compose must contain only the grafana service")
-    service = services["grafana"]
+    service = compose.get("services", {}).get("grafana")
+    if not service:
+        fail("Compose candidate must define the Grafana service")
+    if service.get("read_only") is not True or service.get("user") != "472:0":
+        fail("Grafana must run non-root with a read-only root filesystem")
     if service.get("privileged") is True or service.get("network_mode") == "host":
         fail("Grafana may not use privileged or host-network mode")
     if "ALL" not in service.get("cap_drop", []):
@@ -454,10 +642,6 @@ def main() -> None:
     validate_packaging()
     validate_hostnames()
     validate_generated_dashboards(data)
-    # Generation is part of the validation process. Re-scan the materialized
-    # dashboards so a generator cannot construct an unapproved hostname from
-    # source fragments after the pre-generation scan has already passed.
-    validate_hostnames()
     validate_secret_safety()
     print("Codestra Grafana corporate observability validation: PASS")
 
