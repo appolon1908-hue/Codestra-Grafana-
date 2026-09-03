@@ -5,6 +5,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,14 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 AUTHORITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(AUTHORITY)
+
+CORE_SPEC = importlib.util.spec_from_file_location(
+    "codestra_observability_core_order",
+    ROOT / "validator_core" / "validate_codestra_observability_core.py",
+)
+assert CORE_SPEC is not None and CORE_SPEC.loader is not None
+CORE = importlib.util.module_from_spec(CORE_SPEC)
+CORE_SPEC.loader.exec_module(CORE)
 
 
 class PrivatePostgresAuthorityTests(unittest.TestCase):
@@ -42,6 +51,35 @@ class PrivatePostgresAuthorityTests(unittest.TestCase):
                 ROOT / "scripts" / "__pycache__" / "validator.cpython-312.pyc"
             )
         )
+
+
+class GeneratedDashboardValidationOrderTests(unittest.TestCase):
+    def test_hostname_scan_runs_again_after_dashboard_generation(self) -> None:
+        events: list[str] = []
+
+        with (
+            patch.object(CORE, "validate_registry", return_value={}),
+            patch.object(CORE, "validate_ini"),
+            patch.object(CORE, "validate_datasources"),
+            patch.object(CORE, "validate_dashboard_provisioning"),
+            patch.object(CORE, "validate_rbac"),
+            patch.object(CORE, "validate_runtime"),
+            patch.object(CORE, "validate_packaging"),
+            patch.object(
+                CORE,
+                "validate_hostnames",
+                side_effect=lambda: events.append("scan"),
+            ),
+            patch.object(
+                CORE,
+                "validate_generated_dashboards",
+                side_effect=lambda _data: events.append("generate"),
+            ),
+            patch.object(CORE, "validate_secret_safety"),
+        ):
+            CORE.main()
+
+        self.assertEqual(events, ["scan", "generate", "scan"])
 
 
 class RepositoryAliasAuthorityTests(unittest.TestCase):
