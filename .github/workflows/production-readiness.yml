@@ -1,0 +1,44 @@
+name: Grafana Production Readiness
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - development
+      - test
+      - staging
+      - production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-production-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-certification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - name: Install pinned validation dependency
+        run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.3
+      - name: Run fail-closed repository tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Validate corporate Grafana authority
+        run: python scripts/validate_codestra_observability.py
+      - name: Validate production source readiness
+        run: python scripts/validate_production_readiness.py
+      - name: Verify deterministic generated dashboards
+        run: git diff --exit-code -- codestra/dashboards
+      - name: Compile validation sources
+        run: python -m compileall -q scripts validator_core tests
