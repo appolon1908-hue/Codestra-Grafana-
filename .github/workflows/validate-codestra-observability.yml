@@ -2,18 +2,9 @@ name: Validate Codestra Grafana corporate control plane
 
 on:
   pull_request:
-    paths:
-      - 'codestra/**'
-      - 'scripts/generate_codestra_dashboards.py'
-      - 'scripts/validate_codestra_observability.py'
-      - '.github/workflows/validate-codestra-observability.yml'
   push:
-    branches: [development, test, staging, production, main]
-    paths:
-      - 'codestra/**'
-      - 'scripts/generate_codestra_dashboards.py'
-      - 'scripts/validate_codestra_observability.py'
-      - '.github/workflows/validate-codestra-observability.yml'
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,15 +14,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  validate-source:
+    name: validate-source
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Check out exact head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
 
@@ -41,7 +36,48 @@ jobs:
       - name: Compile deterministic generators and validators
         env:
           PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
-        run: python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py
+        run: |
+          python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py scripts/validate_repository_security.py tests/test_repository_security.py
+          python tests/test_repository_security.py
+          python scripts/validate_repository_security.py
+
+      - name: Bind vendored Git tree to the pinned upstream commit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mapfile -t authority < <(python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('CODESTRA_UPSTREAM.json').read_text())
+          print(data['upstream_clone_url'])
+          print(data['trusted_upstream_ref'])
+          print(data['upstream_ref'])
+          print(data['import_path'])
+          PY
+          )
+          upstream_url="${authority[0]}"
+          trusted_upstream_ref="${authority[1]}"
+          upstream_ref="${authority[2]}"
+          import_path="${authority[3]}"
+          [[ "$upstream_url" == 'https://github.com/grafana/grafana.git' ]]
+          [[ "$trusted_upstream_ref" == 'refs/heads/main' ]]
+          [[ "$upstream_ref" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$import_path" == upstream ]]
+          staging="$(mktemp -d)"
+          trap 'rm -rf -- "$staging"' EXIT
+          git init --quiet "$staging/source"
+          git -C "$staging/source" remote add origin "$upstream_url"
+          GIT_LFS_SKIP_SMUDGE=1 git -C "$staging/source" fetch --filter=blob:none --no-tags origin "${trusted_upstream_ref}:refs/remotes/origin/codestra-trusted"
+          git -C "$staging/source" cat-file -e "${upstream_ref}^{commit}"
+          git -C "$staging/source" merge-base --is-ancestor "$upstream_ref" refs/remotes/origin/codestra-trusted
+          git -C "$staging/source" checkout --quiet --detach "$upstream_ref"
+          [[ "$(git -C "$staging/source" rev-parse HEAD)" == "$upstream_ref" ]]
+          official_tree="$(git -C "$staging/source" rev-parse 'HEAD^{tree}')"
+          vendored_tree="$(git rev-parse "HEAD:${import_path}")"
+          [[ "$vendored_tree" == "$official_tree" ]] || {
+            echo 'Vendored Grafana tree is not the exact pinned upstream tree.' >&2
+            exit 2
+          }
 
       - name: Validate registry, SSO, datasources, RBAC, dashboards, and packaging
         run: python scripts/validate_codestra_observability.py
@@ -73,3 +109,19 @@ jobs:
           assert runtime['activation']
           assert all(value is False for value in runtime['activation'].values())
           PY
+
+      - name: Reject secret material and whitespace errors
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ! grep -RIlE --exclude-dir=.git --exclude-dir=upstream --exclude-dir=tests \
+            '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._~-]{16,}|client_secret[[:space:]]*=[[:space:]]*[^[:space:]<]+)' \
+            .
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          elif [[ "$GITHUB_EVENT_NAME" == push && "${{ github.event.before }}" =~ ^[0-9a-f]{40}$ && "${{ github.event.before }}" != '0000000000000000000000000000000000000000' ]]; then
+            base_sha="${{ github.event.before }}"
+          else
+            base_sha="$(git rev-parse HEAD^)"
+          fi
+          git diff --check "$base_sha" "$GITHUB_SHA" -- . ':(exclude)upstream'
