@@ -39,7 +39,7 @@ class PrivatePostgresAuthorityTests(unittest.TestCase):
 
     def test_decoded_json_hostname_is_rejected(self) -> None:
         raw = r'{"url":"pgex\u002ecodestra.media"}'
-        self.assertFalse("pgex.codestra.media" in raw.lower())
+        self.assertNotIn(AUTHORITY.FORBIDDEN_POSTGRES_HOST, raw.lower())
         document = AUTHORITY.load_json_text(raw, "synthetic-dashboard.json")
         with self.assertRaises(SystemExit):
             AUTHORITY.validate_decoded_json_hostnames(
