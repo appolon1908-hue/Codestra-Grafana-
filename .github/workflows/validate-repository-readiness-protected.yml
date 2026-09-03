@@ -1,0 +1,27 @@
+name: Validate protected Grafana source
+on:
+  push: {branches: [development, test, staging, production, main]}
+permissions: {contents: read}
+jobs:
+  validate-protected:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CODESTRA_GRAFANA_IMAGE: ghcr.io/appolon1908-hue/codestra-grafana--grafana@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      CODESTRA_SOURCE_SHA: "0000000000000000000000000000000000000000"
+      CODESTRA_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: "3.13"}
+      - run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m pip install --disable-pip-version-check --no-cache-dir -r requirements-validation.txt
+          python3 scripts/validate_codestra_observability.py
+          python3 scripts/validate_private_service_authority.py
+          python3 scripts/validate_repository_readiness.py
+          python3 scripts/validate_runtime_identity.py
+          python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build and inspect exact protected commit
+        run: bash scripts/build_and_inspect_locked_image.sh "$GITHUB_SHA"

@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Official upstream documentation and test fixtures excluded from the image build context"
+paths = [
+  '''^upstream/(docs?|documentation|examples?|devenv|e2e|e2e-playwright|emails|public/test|scripts/test)/''',
+  '''^upstream/.*(_test\.go$|\.(spec|test)\.[jt]sx?$|\.golden$|/test-?data/|/fixtures?/|/__snapshots__/)''',
+  '''^upstream/.*README\.md$''',
+  '''^upstream/pkg/tests/''',
+  '''^upstream/(apps/advisor/pkg/app/checks/configchecks/security_config_step\.go|conf/defaults\.ini|packages/grafana-openapi/src/api/openapi3\.json|pkg/api/dtos/apikey\.go|pkg/services/cloudmigration/api/curl_commands\.txt|public/api-enterprise-spec\.json|public/api-merged\.json|public/openapi3\.json|public/app/features/provisioning/Wizard/fields\.ts|scripts/build/gpg-test-vars\.sh)$''',
+]

@@ -2,18 +2,8 @@ name: Validate Codestra Grafana corporate control plane
 
 on:
   pull_request:
-    paths:
-      - 'codestra/**'
-      - 'scripts/generate_codestra_dashboards.py'
-      - 'scripts/validate_codestra_observability.py'
-      - '.github/workflows/validate-codestra-observability.yml'
   push:
     branches: [development, test, staging, production, main]
-    paths:
-      - 'codestra/**'
-      - 'scripts/generate_codestra_dashboards.py'
-      - 'scripts/validate_codestra_observability.py'
-      - '.github/workflows/validate-codestra-observability.yml'
 
 permissions:
   contents: read
@@ -28,10 +18,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out exact head
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.13'
 
@@ -41,22 +33,40 @@ jobs:
       - name: Compile deterministic generators and validators
         env:
           PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
-        run: python -m py_compile scripts/generate_codestra_dashboards.py scripts/validate_codestra_observability.py
+        run: |
+          python -m py_compile \
+            scripts/generate_codestra_dashboards.py \
+            scripts/validate_codestra_observability.py \
+            scripts/validate_private_service_authority.py \
+            tests/test_private_service_authority.py
 
       - name: Validate registry, SSO, datasources, RBAC, dashboards, and packaging
         run: python scripts/validate_codestra_observability.py
 
+      - name: Validate private-service and repository-name authority
+        run: python scripts/validate_private_service_authority.py
+
+      - name: Run authority regression tests
+        env:
+          PYTHONPYCACHEPREFIX: /tmp/codestra-grafana-pycache
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
       - name: Render hardened Compose candidate
         env:
-          PYTHON_BUILDER_IMAGE: python:3.13-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
-          GRAFANA_BASE_IMAGE: grafana/grafana:99.0.0@sha256:1111111111111111111111111111111111111111111111111111111111111111
-          CODESTRA_GRAFANA_IMAGE: ghcr.io/appolon1908-hue/codestra-grafana:ci@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          CODESTRA_GRAFANA_IMAGE: ghcr.io/appolon1908-hue/codestra-grafana--grafana@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          CODESTRA_SOURCE_SHA: '0000000000000000000000000000000000000000'
+          CODESTRA_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
           CODESTRA_ENVIRONMENT: test
           CODESTRA_REGION: ci
           CODESTRA_DEPLOYMENT_ID: exact-head-ci
           GF_DATABASE_HOST: postgres-grafana:5432
           GF_DATABASE_NAME: grafana
           GRAFANA_HOST_PORT: '3000'
+          GRAFANA_OIDC_CLIENT_SECRET_FILE: /tmp/not-read-during-render
+          GRAFANA_DATABASE_USER_FILE: /tmp/not-read-during-render
+          GRAFANA_DATABASE_PASSWORD_FILE: /tmp/not-read-during-render
+          GRAFANA_DATABASE_CA_FILE: /tmp/not-read-during-render
+          GRAFANA_SECRET_KEY_FILE: /tmp/not-read-during-render
         run: |
           docker compose -f codestra/deploy/compose.candidate.yaml config > /tmp/codestra-grafana-compose.yaml
           test -s /tmp/codestra-grafana-compose.yaml
