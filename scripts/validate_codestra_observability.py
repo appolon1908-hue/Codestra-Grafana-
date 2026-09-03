@@ -9,12 +9,14 @@ repository-name migration aliases.
 
 from __future__ import annotations
 
+import html
 import importlib.util
 import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "validator_core" / "validate_codestra_observability_core.py"
@@ -24,6 +26,7 @@ BUSINESS_REGISTRY = ROOT / "codestra" / "business-registry.json"
 DASHBOARDS = ROOT / "codestra" / "dashboards"
 FORBIDDEN_POSTGRES_HOST = "pgex" + ".codestra.media"
 PRIVATE_POSTGRES_IDENTITY = "postgres-exporter:9187"
+DOT_EQUIVALENTS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
 REQUIRED_REPOSITORY_ALIASES = {
     1221155447: {
         "current": "appolon1908-hue/Frontend-Resturant-",
@@ -90,8 +93,20 @@ def load_core() -> ModuleType:
     return module
 
 
+def normalized_hostname_text(text: str) -> str:
+    """Normalize URL/IDNA representations that resolve to the same hostname."""
+
+    normalized = html.unescape(text).translate(DOT_EQUIVALENTS)
+    for _ in range(4):
+        decoded = html.unescape(unquote(normalized)).translate(DOT_EQUIVALENTS)
+        if decoded == normalized:
+            break
+        normalized = decoded
+    return normalized.lower()
+
+
 def contains_forbidden_postgres_hostname(text: str) -> bool:
-    return FORBIDDEN_POSTGRES_HOST in text.lower()
+    return FORBIDDEN_POSTGRES_HOST in normalized_hostname_text(text)
 
 
 def iter_decoded_strings(value: Any) -> Iterator[str]:
@@ -331,9 +346,10 @@ def main() -> None:
 
     def governed_validate_generated_dashboards(data: dict[str, Any]) -> None:
         original_validate_generated_dashboards(data)
-        # The generator can construct strings or JSON escapes after the initial
-        # source scan. Re-run the governed checks and inspect decoded dashboard
-        # keys and values before the core validator can print PASS.
+        # The generator can construct strings or encoded URL hostnames after
+        # the initial source scan. Re-run governed checks and inspect decoded,
+        # percent-decoded, HTML-decoded, and IDNA-dot-normalized strings before
+        # the core validator can print PASS.
         governed_validate_hostnames()
         validate_generated_dashboard_authority()
 
